@@ -1,133 +1,90 @@
-# Hajó kijelző / Boat display bring-up
+# Hajó kijelző — minimal black/white test
 
-## Current review branch: `fix/minimal-spi-bringup`
+Branch: `test/minimal-black-white`.
 
-The default build is now **USB-free**, with normal **2-line SPI master** and
-PA5/PA7 permanently in AF5 after initialization. PA6/MISO is not connected or
-configured. PA4 remains an active-HIGH GPIO. SPI stays enabled throughout
-normal packets and between the HAL transmit calls within a full frame.
-The test repeats **black → 2 s → white → 2 s**, with continuous DISP HIGH.
-SPI is still 250 kHz to isolate the software changes from a frequency change.
-The Sharp framing and external-COM phase guard are unchanged.
+This branch runs only the requested bring-up sequence:
 
-USB CDC is retained as an optional build: `-DSHARP_USB_DIAG=ON`. In the default
-OFF build the USB stack, PCD, HSI48/CRS setup and USB IRQs are absent, and **no
-COM-port will appear**. ST-LINK can inspect `test_stage` and `last_hal_status`.
-The older USB/diagnostic sections below describe optional/historical modes.
-See [minimal bring-up review](MINIMAL_BRINGUP.md) for changes and validation.
+```text
+STM32 startup
+SPI1 normal 2-line master, 1 MHz, mode 0, LSB first
+TIM3 EXTCOMIN hardware 1 Hz / 50% starts
+All Clear
+DISP HIGH
+full black -> wait 2 s -> full white -> wait 2 s -> repeat
+```
 
-Minimal STM32 HAL firmware for a **WeAct Studio STM32G4 Core Board
-(STM32G431CBU6)** driving a **Sharp LS044Q7DH01** 320x240 monochrome Memory LCD.
-
-**Status: hardware bring-up in progress. The display is not yet reliable.**
-Build, ST-LINK flashing and USB CDC logging work, but the panel shows uneven
-flicker / corrupted or unchanged images. Start with [review notes](REVIEW_NOTES.md)
-for the symptoms, evidence limits and specific review questions.
-
-Magyarul: a hajókijelző első hardvertesztje, jelenleg hibakeresési állapotban.
-A kód átnézéséhez a [REVIEW_NOTES.md](REVIEW_NOTES.md) az ajánlott kezdőpont.
+There is no USB, mode selection, checkerboard call, framebuffer or UI in the
+application. `Core/Src/main.c` contains the entire application loop.
+The older USB source and reports remain as reference files but are not built.
 
 ## Hardware
 
-| STM32 | LCD | Configuration |
+WeAct Studio STM32G4 Core Board, STM32G431CBU6.
+Sharp LS044Q7DH01, 320x240 monochrome Memory LCD.
+
+| STM32 | LCD | Mode |
 |---|---|---|
-| PA5 | SCLK | SPI1, mode 0, currently **250 kHz** |
-| PA7 | SI/MOSI | SPI1, hardware LSB first |
-| PA4 | SCS | GPIO, **active HIGH**, not hardware NSS |
-| PB0 | EXTCOMIN | AF2 TIM3_CH3, nominal 1 Hz, 50% duty |
-| PB1 | DISP | GPIO; initially LOW, then HIGH |
-| — | EXTMODE | Fixed directly to LCD VDD |
-| — | VDD + VDDA | 5 V |
-| — | VSS + VSSA | Common GND |
+| PA5 | SCLK | permanent AF5 SPI1, 1 MHz |
+| PA7 | SI/MOSI | permanent AF5 SPI1 |
+| PA4 | SCS | GPIO, active HIGH |
+| PB0 | EXTCOMIN | AF2 TIM3_CH3, nominal 1 Hz / 50% |
+| PB1 | DISP | GPIO, LOW at startup, then continuously HIGH |
+| — | EXTMODE | fixed to LCD VDD, 5 V |
+| — | VDD / VDDA | both 5 V |
+| — | VSS / VSSA | common GND |
 
-MCU supply/output logic: 3.3 V. External 10 kΩ pulldowns on the five MCU-driven
-LCD signals are recommended for LOW levels during reset. Supply sequencing is
-hardware-dependent: this configuration has no LCD power switch/power-good input.
-USB CDC uses the native PA11/PA12 USB-C connection, without a USB-UART adapter.
+MCU power and signals are 3.3 V. PA6/MISO stays analog and unconnected.
+External 10 kΩ pulldowns on the five LCD control signals provide LOW during
+MCU reset. Stable LCD power and correct supply sequencing are hardware
+prerequisites; the firmware has no LCD power switch or power-good signal.
 
-## Scope and default test
+## Initialization details
 
-Own small C driver; no framebuffer, fonts, CAN or graphical UI.
-API: `sharp_init`, `sharp_clear`, `sharp_fill`, `sharp_write_line`,
-`sharp_test_pattern`. Returns HAL status codes. Line numbers **1..240**,
-40 bytes/line, bit0 first; 1=white, 0=black.
+EXTCOMIN starts before All Clear, while DISP remains LOW. After Clear and
+its guard delay, DISP goes HIGH. Startup waits for the next external COM
+rising edge and its initialization guard before the first image write.
+The driver retains the datasheet COM-safe phase guard around transactions.
+Image transfer and phase alignment add time to the 2 s application waits.
 
-Power-up: safe LOW pins, All Clear, guard delay, start hardware EXTCOMIN timer,
-then DISP HIGH. Default test: **2 s white / 2 s black**, repeated. Image transfer
-and COM-phase alignment add to the visible interval.
+The Sharp framing is unchanged: active-HIGH SCS, LSB-first mode/address/pixel
+bytes, 24 clocks for All Clear, 16 transfer clocks after the last line.
+Normal transactions never disable SPI or change PA5/PA7 GPIO modes.
 
-`SHARP_SIMPLE_BLINK=ON` is the current default. With it OFF,
-`SHARP_DIAGNOSTIC_LOOP=ON` selects DISP/clear/white/black/checkerboard phases.
-With both OFF, the original one-shot white/black/checkerboard test runs.
-The original 1 MHz SPI was reduced to 250 kHz as a diagnostic trial; it did not
-resolve the reported panel problem.
-
-## Clone and dependencies
+## Build and flash
 
 ```sh
-git clone --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
+git clone --branch test/minimal-black-white --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
 cd hajo-kijelzo
 ```
 
-Four ST/ARM dependencies are Git submodules pinned to exact commits.
-If cloned without submodules:
-
-```sh
-git submodule update --init --depth 1
-```
-
-Windows `scripts/bootstrap.ps1` also limits CMSIS checkout to the needed Core
-headers. Third-party licenses remain in their modules; ST example descriptor
-attribution is retained under `USB/`.
-
-## Build
-
-Requirements: Arm GNU Toolchain (`arm-none-eabi-gcc`, newlib-nano), CMake >=3.22,
-Ninja. Tested: ST GCC 14.3.1, CMake 4.0.0, Ninja 1.13.2.
-
-Windows / VS Code (`Ctrl+Shift+B`):
+Dependencies are pinned Git submodules. Windows bootstrap if required:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
-```
-
-The script discovers STM32 VS Code tool bundles, with a PATH fallback.
-Generic command-line build:
-
-```sh
-cmake -S . -B build -G Ninja
-cmake --build build
-```
-
-On Windows, `-DARM_GCC_BIN=C:/path/to/toolchain/bin` selects an explicit compiler.
-Outputs: `sharp_lcd.elf`, `.hex`, `.bin`, `.map`. The Windows script uses
-`build-st/`; the generic example uses `build/`.
-
-Target: ST `startup_stm32g431xx.s`, `STM32G431xx`, Cortex-M4F, hard-float ABI.
-Linker: 128 KiB flash at 0x08000000, 22 KiB contiguous SRAM at 0x20000000,
-initial SP 0x20005800. Separate 10 KiB CCM SRAM is unused.
-
-## Flash and USB log
-
-ST-LINK: SWDIO→PA13, SWCLK→PA14, common GND, 3.3 V reference, NRST recommended.
-Flash **replaces the current firmware**:
-
-```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\monitor.ps1 -Port COM10 -Seconds 20
 ```
 
-COM10 is development-machine-specific. Terminal: 115200 8N1, no flow control,
-DTR enabled. [USB diagnostics](USB_DIAGNOSTICS.md) explains the log fields.
+Build requires Arm GNU Toolchain, CMake and Ninja. Flash uses ST-LINK and
+STM32CubeProgrammer and replaces the existing firmware. VS Code Ctrl+Shift+B
+runs the build. Artifacts are under `build-st/`.
 
-## Documentation
+ST startup/linker target STM32G431CBU6: 128 KiB flash, 22 KiB contiguous SRAM;
+initial SP=0x20005800. CCM RAM is unused. HSI16 supplies SYSCLK/SPI/TIM3.
 
-- [Review request / current fault](REVIEW_NOTES.md)
-- [Diagnostic test modes](DIAGNOSTIC.md)
-- [USB diagnostics](USB_DIAGNOSTICS.md)
-- [Prior datasheet audit](DATASHEET_AUDIT.md)
-- [Historical build report](BUILD_REPORT.md)
-- [Earlier Hungarian development notes](docs/DEVELOPMENT_NOTES.hu.md)
+## Validation and current fault
 
-Primary display reference: Sharp **LD-2025315, 2025-03-25**, supplied locally.
-The PDF and video captures are not included in this source repository.
+Build: 8080 B flash, 2248 B SRAM including 2 KiB stack reserve, no compiler or
+linker warnings. USB/PCD/CDC and checkerboard symbols are absent from the ELF.
+The LCD's actual optical response still needs confirmation.
+
+No COM port is expected in this test. ST-LINK variables:
+`test_stage=1` initialization, `13` black, `12` white,
+`0xFFFFFFFF` error. `last_hal_status=0` means HAL_OK, not LCD acknowledgement.
+
+Before this branch, the user observed uneven whole-panel flicker and sometimes
+an unchanged/corrupt image. The 5 V rails were measured; connector-level
+DISP/EXTMODE/EXTCOMIN/SPI timing still needs verification if the issue persists.
+Older reviews and reports describe earlier firmware settings, not this exact
+minimal test. The prior change is on `fix/minimal-spi-bringup`; the original
+USB diagnostic baseline is on `main`.

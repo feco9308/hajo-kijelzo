@@ -58,19 +58,10 @@ HAL_StatusTypeDef sharp_init(void)
     /* LD-2025315: >=one All Clear; TA >=100 us after initialization.
      * Keep a conservative 50 ms guard after the completed command. */
     HAL_Delay(50);
-    /* Start the external waveform before enabling DISP, as requested.
-     * PWM2 begins LOW; its first rising edge occurs 500 ms after start. */
-    s = board_extcom_start();
-    if (s != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
-        return s;
-    }
-    HAL_Delay(1);
+    /* Main has already started the hardware EXTCOMIN timer, before clear. */
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
-    /* T3: DISP -> first EXTCOMIN rising edge ~499 ms (minimum 100 us).
-     * T4: wait >=2 ms after that edge before permitting SCS HIGH.
-     * Poll actual timer phase, not a SysTick/HSI phase estimate. */
-    board_wait_extcom_slot();
+    HAL_Delay(1); /* TCOM latch release >=100 us. */
+    board_wait_next_extcom_rise(); /* T4 >=100 us after next rising edge. */
     return HAL_OK;
 }
 

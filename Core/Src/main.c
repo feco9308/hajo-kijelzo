@@ -1,9 +1,6 @@
 #include <stdbool.h>
 #include "board.h"
 #include "sharp_ls044q7dh01.h"
-#ifdef SHARP_USB_DIAG
-#include "usb_diag.h"
-#endif
 
 SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
@@ -13,9 +10,6 @@ volatile HAL_StatusTypeDef last_hal_status;
 static void check(HAL_StatusTypeDef s)
 {
     last_hal_status = s;
-#ifdef SHARP_USB_DIAG
-    diag_last_hal_status = s;
-#endif
     if (s != HAL_OK) Error_Handler();
 }
 
@@ -28,18 +22,15 @@ void board_delay_us(uint32_t us)
 
 void board_wait_extcom_slot(void)
 {
-    if ((TIM3->CR1 & TIM_CR1_CEN) == 0U) return; /* Initial All Clear. */
+    if ((TIM3->CR1 & TIM_CR1_CEN) == 0U) return;
     /* LD-2025315 6-6-5: a rising EXTCOMIN while SCS is HIGH defers COM
      * inversion until SCS falls. Start only 2..300 ms after a rising edge.
      * PWM2 rises at CNT=500; next rise is at CNT=500 in the next period.
      * This leaves >=700 ms before the next rising edge, above a complete
-     * ~323 ms pixel transfer at diagnostic 250 kHz plus software overhead.
+     * ~81 ms pixel transfer at 1 MHz plus software overhead.
      * Main-context-only blocking function; TIM3 must be running. */
     uint32_t count;
     do {
-#ifdef SHARP_USB_DIAG
-        usb_diag_poll();
-#endif
         count = __HAL_TIM_GET_COUNTER(&htim3);
     } while (count < 502U || count > 800U);
 }
@@ -59,6 +50,14 @@ static void gpio_init(void)
     HAL_GPIO_Init(GPIOA, &g);
     g.Pin = GPIO_PIN_0 | GPIO_PIN_1;
     HAL_GPIO_Init(GPIOB, &g);
+}
+
+void board_wait_next_extcom_rise(void)
+{
+    /* Startup only: wait for a rising edge AFTER DISP was enabled, then
+     * 2 ms of TCOM initialization. PWM2 rises at CNT=500 every period. */
+    while (__HAL_TIM_GET_COUNTER(&htim3) >= 500U) { }
+    while (__HAL_TIM_GET_COUNTER(&htim3) < 502U) { }
 }
 
 static void clock_init(void)
@@ -94,9 +93,7 @@ static void spi_init(void)
     hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
     hspi1.Init.NSS = SPI_NSS_SOFT; /* PA4 is GPIO: active HIGH. */
-    /* Controlled signal-integrity trial: HSI16 / 64 = 250 kHz.
-     * LD-2025315 has no minimum SCLK frequency; 2 MHz is the maximum. */
-    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16; /* 1 MHz. */
     hspi1.Init.FirstBit = SPI_FIRSTBIT_LSB;
     hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -150,27 +147,9 @@ HAL_StatusTypeDef board_extcom_start(void)
     return HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 }
 
-static void hold_image(uint32_t ms)
-{
-    /* LD-2025315 6-5-3 Note 6-5-2: no SPI keepalive is needed in external
-     * COM mode while holding an image. SCS/SCLK/SI remain physically LOW. */
-#ifdef SHARP_USB_DIAG
-    uint32_t start = HAL_GetTick();
-    while ((uint32_t)(HAL_GetTick() - start) < ms) {
-        usb_diag_poll();
-        HAL_Delay(1);
-    }
-#else
-    HAL_Delay(ms);
-#endif
-}
-
+/* This is the entire application: no USB, test-mode selection or UI. */
 int main(void)
 {
-#ifdef SHARP_USB_DIAG
-    diag_reset_flags = RCC->CSR;
-    __HAL_RCC_CLEAR_RESET_FLAGS();
-#endif
     HAL_Init();
     gpio_init();
     clock_init();
@@ -179,58 +158,18 @@ int main(void)
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     spi_init();
     timer_init();
-    /* Absence/failure of USB must never stop external COM or the LCD test. */
-#ifdef SHARP_USB_DIAG
-    diag_usb_status = usb_diag_init();
-#endif
+    check(board_extcom_start()); /* 1 Hz starts BEFORE All Clear. */
     test_stage = 1;
-    check(sharp_init());
-#if defined(SHARP_SIMPLE_BLINK)
-    /* Continuous DISP HIGH; no long blanking/clear phases that could be
-     * mistaken for a stopped test. Keep SPI timing and COM unchanged. */
+    check(sharp_init());         /* All Clear, then DISP HIGH. */
+
     for (;;) {
         test_stage = 13;
         check(sharp_fill(false));
-        hold_image(2000);
+        HAL_Delay(2000);
         test_stage = 12;
         check(sharp_fill(true));
-        hold_image(2000);
+        HAL_Delay(2000);
     }
-#elif defined(SHARP_DIAGNOSTIC_LOOP)
-    for (;;) {
-        /* Separate display blanking (no SPI) from memory writes. Keep the
-         * hardware EXTCOMIN waveform running throughout all five phases. */
-        test_stage = 10;
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
-        hold_image(3000);
-
-        test_stage = 11;
-        check(sharp_clear());
-        HAL_Delay(1); /* >=100 us after clear before enabling DISP. */
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
-        hold_image(3000);
-
-        test_stage = 12;
-        check(sharp_fill(true));
-        hold_image(3000);
-        test_stage = 13;
-        check(sharp_fill(false));
-        hold_image(3000);
-        test_stage = 14;
-        check(sharp_test_pattern());
-        hold_image(3000);
-    }
-#else
-    test_stage = 2;
-    check(sharp_fill(true));
-    hold_image(3000);
-    test_stage = 3;
-    check(sharp_fill(false));
-    hold_image(3000);
-    test_stage = 4;
-    check(sharp_test_pattern());
-    for (;;) hold_image(1000);
-#endif
 }
 
 void SysTick_Handler(void) { HAL_IncTick(); }
@@ -254,9 +193,6 @@ void Error_Handler(void)
     HAL_GPIO_Init(GPIOA, &g);
     /* Do not stop TIM3: inversion remains available after runtime errors. */
     for (;;) {
-#ifdef SHARP_USB_DIAG
-        usb_diag_poll();
-#endif
     }
 }
 void HardFault_Handler(void) { Error_Handler(); }
