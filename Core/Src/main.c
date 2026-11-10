@@ -5,6 +5,7 @@
 SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
 volatile uint32_t test_stage;
+volatile uint32_t test_line;
 volatile HAL_StatusTypeDef last_hal_status;
 
 static void check(HAL_StatusTypeDef s)
@@ -50,6 +51,18 @@ static void gpio_init(void)
     HAL_GPIO_Init(GPIOA, &g);
     g.Pin = GPIO_PIN_0 | GPIO_PIN_1;
     HAL_GPIO_Init(GPIOB, &g);
+}
+
+void board_wait_extcom_line_slot(void)
+{
+    /* A 44-byte single-line packet is 352 us at 1 MHz. Avoid only the
+     * 5 ms region around EXTCOMIN's CNT=500 rising edge, rather than the
+     * broad full-frame window. This keeps the line sweep nearly uniform. */
+    if ((TIM3->CR1 & TIM_CR1_CEN) == 0U) return;
+    uint32_t count;
+    do {
+        count = __HAL_TIM_GET_COUNTER(&htim3);
+    } while (count >= 497U && count < 502U);
 }
 
 void board_wait_next_extcom_rise(void)
@@ -162,19 +175,32 @@ int main(void)
     test_stage = 1;
     check(sharp_init());         /* All Clear, then DISP HIGH. */
 
+    uint8_t row[SHARP_LINE_BYTES]; /* Only one row, not a framebuffer. */
     for (;;) {
-        test_stage = 12;
-        check(sharp_fill(true));
-        HAL_Delay(3000);
-        test_stage = 13;
-        check(sharp_fill(false));
-        HAL_Delay(3000);
-        test_stage = 14;
-        check(sharp_test_pattern());
-        HAL_Delay(3000);
-        test_stage = 15;
-        check(sharp_test_pattern_inverted());
-        HAL_Delay(3000);
+        test_stage = 20;
+        test_line = 0;
+        check(sharp_clear());
+        HAL_Delay(1000);
+
+        for (unsigned i = 0; i < sizeof row; ++i) row[i] = 0x00;
+        test_stage = 21;
+        for (uint16_t line = 1; line <= SHARP_HEIGHT; ++line) {
+            test_line = line;
+            check(sharp_write_line(line, row));
+            HAL_Delay(40); /* About 10 seconds for the entire black sweep. */
+        }
+        test_stage = 22;
+        HAL_Delay(2000);
+
+        for (unsigned i = 0; i < sizeof row; ++i) row[i] = 0xFF;
+        test_stage = 23;
+        for (uint16_t line = 1; line <= SHARP_HEIGHT; ++line) {
+            test_line = line;
+            check(sharp_write_line(line, row));
+            HAL_Delay(40);
+        }
+        test_stage = 24;
+        HAL_Delay(2000);
     }
 }
 

@@ -4,6 +4,7 @@ extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim3;
 void board_delay_us(uint32_t us);
 void board_wait_extcom_slot(void);
+void board_wait_extcom_line_slot(void);
 void board_wait_next_extcom_rise(void);
 HAL_StatusTypeDef board_extcom_start(void);
 void Error_Handler(void);

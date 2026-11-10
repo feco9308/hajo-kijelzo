@@ -7,12 +7,13 @@
 #include "board.h"
 #include <string.h>
 
-static void begin(void)
+static void begin(bool single_line)
 {
     /* Serialize calls in main context; no nested transactions. SPI remains
      * enabled and PA5/PA7 remain AF5 throughout normal operation. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    board_wait_extcom_slot();
+    if (single_line) board_wait_extcom_line_slot();
+    else board_wait_extcom_slot();
     board_delay_us(2); /* SCS LOW >=1 us even between adjacent API calls. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
     board_delay_us(4); /* SCS setup >= 3 us. */
@@ -40,7 +41,7 @@ static HAL_StatusTypeDef command(uint8_t cmd)
     /* 3 mode bits + >13 transfer clocks: use 24 clocks, not just 16.
      * All Clear M2 is bit2 because the peripheral sends LSB first. */
     uint8_t packet[3] = {cmd, 0, 0};
-    begin();
+    begin(false);
     return end(tx(packet, sizeof packet));
 }
 
@@ -72,7 +73,7 @@ HAL_StatusTypeDef sharp_write_line(uint16_t line, const uint8_t *data)
     memcpy(packet + 2, data, SHARP_LINE_BYTES);
     /* Last two bytes supply the required 16 transfer clocks. */
     packet[42] = packet[43] = 0;
-    begin();
+    begin(true);
     return end(tx(packet, sizeof packet));
 }
 
@@ -81,7 +82,7 @@ static HAL_StatusTypeDef screen(bool white, bool pattern)
     uint8_t row[42]; /* address + 40 pixels bytes + 8 dummy clocks */
     const uint8_t update = 0x01;
     const uint8_t final_dummy = 0;
-    begin();
+    begin(false);
     HAL_StatusTypeDef s = tx(&update, 1);
     for (uint16_t y = 1; y <= SHARP_HEIGHT && s == HAL_OK; ++y) {
         row[0] = (uint8_t)y;

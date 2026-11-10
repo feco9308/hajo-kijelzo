@@ -1,45 +1,53 @@
-﻿# Hajó kijelző — swapped-pin stripe test
+﻿# Hajó kijelző — line-by-line black/white sweep
 
-Branch: `test/swapped-pins-stripes`.
+Branch: `test/line-by-line`.
 
-**User-confirmed current wiring:** PB0 goes to LCD DISP (pin 5), PB1 goes to
-LCD EXTCOMIN (pin 4), EXTMODE (pin 8) is tied to LCD VDD / 5 V.
-The firmware is deliberately configured for this swapped wiring.
+The test clears the panel to white, then cumulatively writes one black line
+at a time, addresses 1..240. After 2 s full black it writes the same lines
+white, one at a time, then holds full white for 2 s and repeats.
+Each line has a 40 ms application delay: a sweep takes about 10 seconds.
+The physical sweep direction follows the panel's native line orientation;
+rotating the panel can make the boundary move sideways rather than downward.
 
-| MCU | LCD | Configuration |
+Only a 40-byte row buffer is used. Every row is a separate active-HIGH SCS
+transaction, sent through `sharp_write_line`, with 320 pixels and 16 final
+dummy clocks. The driver uses a short COM-safe window for these ~352 us
+packets so the sweep does not pause at the broad full-frame timing window.
+
+## Current, user-confirmed wiring
+
+| MCU | LCD | Mode |
 |---|---|---|
-| PA5 | SCLK | SPI1 AF5, 1 MHz, mode 0 |
-| PA7 | SI | SPI1 AF5, hardware LSB-first |
-| PA4 | SCS | GPIO, active HIGH |
-| **PB0** | **DISP, LCD pin 5** | GPIO, LOW at startup, then continuously HIGH |
-| **PB1** | **EXTCOMIN, LCD pin 4** | **AF2 TIM3_CH4**, 1 Hz / 50% duty |
-| — | EXTMODE, LCD pin 8 | fixed to 5 V / LCD VDD |
+| PA5 | SCLK | AF5 SPI1, 1 MHz, mode 0 |
+| PA7 | SI/MOSI | AF5 SPI1, hardware LSB-first |
+| PA4 | SCS | active-HIGH GPIO |
+| PB0 | DISP, LCD pin 5 | LOW at startup, then continuously HIGH |
+| PB1 | EXTCOMIN, LCD pin 4 | AF2 TIM3_CH4, nominal 1 Hz, 50% |
+| — | EXTMODE, LCD pin 8 | fixed to LCD VDD / 5 V |
 | — | VDD and VDDA | 5 V |
 | — | VSS and VSSA | common GND |
 
-MCU supply/signals remain 3.3 V; MISO/PA6 is unconnected. SPI is normal 2-line
-master. PA5/PA7 remain AF5. Only SCS toggles for a packet. Zero dummy data and
-CPOL=0 keep SI/SCLK LOW at idle. External pulldowns are needed during reset.
+MCU supply/signals are 3.3 V; PA6/MISO is analog and unconnected. PA5/PA7 stay
+AF5 throughout normal operation. No USB or framebuffer is built.
+The LCD power must already be stable. Hardware EXTCOMIN runs through all holds.
 
-## Repeating sequence
+## Debugger state
 
-After safe GPIO initialization, hardware EXTCOMIN start, All Clear and DISP
-HIGH, the firmware repeats:
+- `test_stage=20`: clear/white starting hold.
+- `21`: writing black lines; `test_line` is the current address 1..240.
+- `22`: full black hold.
+- `23`: writing white lines; `test_line` is the current address.
+- `24`: full white hold.
+- `0xFFFFFFFF`: fatal error; DISP forced LOW.
+- `last_hal_status=0`: HAL transmit completed, not an LCD acknowledgement.
 
-1. Full white, hold 3 s (stage 12).
-2. Full black, hold 3 s (stage 13).
-3. Vertical bars, 8 pixels wide, hold 3 s (stage 14).
-4. Inverted bars, hold 3 s (stage 15).
+Observe whether the same bad line/points persist while the sweep crosses
+those positions. Actual panel behavior is not validated by the MCU counters.
 
-There are 40 alternating bars across 320 pixels, identical across all 240 rows.
-Transfer/COM-phase alignment adds time to the holds. The loop does not stop.
-DISP is continuously HIGH after startup; it is not the 1 Hz signal.
-No USB, console or framebuffer is built. EXTMODE=HIGH means M1 stays 0.
-
-## Build / flash
+## Build and flash
 
 ```sh
-git clone --branch test/swapped-pins-stripes --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
+git clone --branch test/line-by-line --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
 ```
 
 ```powershell
@@ -48,15 +56,10 @@ git clone --branch test/swapped-pins-stripes --recurse-submodules https://github
 .\scripts\flash.ps1
 ```
 
-Flashing replaces the current firmware. ST-LINK, Arm GNU Toolchain, CMake and
-Ninja required. Output under `build-st/`. Target: STM32G431CBU6, 128 KiB flash,
-22 KiB contiguous SRAM, initial SP=0x20005800. Build: 8136 B flash, 2248 B SRAM
-including stack reserve, no compiler/linker warnings.
+Flash replaces the existing firmware. Artifacts: `build-st/`.
+Target: STM32G431CBU6, ST startup, 128 KiB flash / 22 KiB contiguous SRAM,
+initial SP=0x20005800. Build: 8220 B flash, 2256 B SRAM including stack reserve;
+no compiler/linker warnings.
 
-The original firmware expected PB0=EXTCOMIN and PB1=DISP. With physically
-swapped wires, that old program could route 1 Hz to DISP and cause whole-panel
-blinking. A visible response in that state alone does not validate image data.
-This revision puts the PWM on PB1/TIM3_CH4 and stable DISP on PB0.
-
-Older reports/docs describe historical wiring and modes. This README defines
-the current configuration. Actual optical success still requires observation.
+Earlier docs describe historical modes and wiring; this README defines the
+current line-sweep test. Previous stripe test: `test/swapped-pins-stripes`.
