@@ -56,7 +56,9 @@ extern "C" {
 /* #define HAL_NAND_MODULE_ENABLED */
 /* #define HAL_NOR_MODULE_ENABLED */
 /* #define HAL_OPAMP_MODULE_ENABLED */
+#ifdef SHARP_USB_DIAG
 #define HAL_PCD_MODULE_ENABLED
+#endif
 #define HAL_PWR_MODULE_ENABLED
 /* #define HAL_QSPI_MODULE_ENABLED */
 #define HAL_RCC_MODULE_ENABLED

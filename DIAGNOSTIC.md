@@ -1,5 +1,9 @@
 # Aktív, ismétlődő diagnosztika
 
+**Jelenlegi javító branch:** USB alapból OFF, SPI 2-line, állandó PA5/PA7 AF5,
+fekete/fehér teszt. Részletek: `MINIMAL_BRINGUP.md`. Az alábbiak részben a
+korábbi USB-s diagnosztikát írják le.
+
 **Aktuális próba:** `SHARP_SIMPLE_BLINK=ON` felülírja a lent részletezett
 ötfázisú diagnosztikát. Az inicializálás után DISP végig HIGH, a teljes
 kijelző 2 s fehér (stage=12), majd 2 s fekete (stage=13), folyamatosan.

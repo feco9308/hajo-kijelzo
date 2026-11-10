@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/cmake/arm-none-eabi.cmake" CACHE FILEPATH "")
 project(sharp_lcd C ASM)
-option(SHARP_DIAGNOSTIC_LOOP "Repeat DISP/clear/white/black/checkerboard diagnosis" ON)
+option(SHARP_USB_DIAG "Enable USB CDC diagnostics (OFF for minimal bring-up)" OFF)
+option(SHARP_DIAGNOSTIC_LOOP "Repeat DISP/clear/white/black/checkerboard diagnosis" OFF)
 option(SHARP_SIMPLE_BLINK "Unambiguous 2-second white/black LCD test" ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -13,10 +14,14 @@ add_executable(sharp_lcd
     Core/Src/main.c Core/Src/sharp_ls044q7dh01.c
     ${DEVICE}/Source/Templates/system_stm32g4xx.c
     ${DEVICE}/Source/Templates/gcc/startup_stm32g431xx.s)
-target_sources(sharp_lcd PRIVATE USB/Src/usbd_conf.c USB/Src/usbd_desc.c USB/Src/usb_diag.c
-    ${USBD}/Core/Src/usbd_core.c ${USBD}/Core/Src/usbd_ctlreq.c ${USBD}/Core/Src/usbd_ioreq.c
-    ${USBD}/Class/CDC/Src/usbd_cdc.c ${HAL}/Src/stm32g4xx_ll_usb.c)
-foreach(module hal hal_cortex hal_dma hal_flash hal_flash_ex hal_gpio hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_spi hal_tim hal_tim_ex hal_pcd hal_pcd_ex)
+if(SHARP_USB_DIAG)
+    target_compile_definitions(sharp_lcd PRIVATE SHARP_USB_DIAG)
+    target_sources(sharp_lcd PRIVATE USB/Src/usbd_conf.c USB/Src/usbd_desc.c USB/Src/usb_diag.c
+        ${USBD}/Core/Src/usbd_core.c ${USBD}/Core/Src/usbd_ctlreq.c ${USBD}/Core/Src/usbd_ioreq.c
+        ${USBD}/Class/CDC/Src/usbd_cdc.c ${HAL}/Src/stm32g4xx_ll_usb.c
+        ${HAL}/Src/stm32g4xx_hal_pcd.c ${HAL}/Src/stm32g4xx_hal_pcd_ex.c)
+endif()
+foreach(module hal hal_cortex hal_dma hal_flash hal_flash_ex hal_gpio hal_pwr hal_pwr_ex hal_rcc hal_rcc_ex hal_spi hal_tim hal_tim_ex)
     target_sources(sharp_lcd PRIVATE ${HAL}/Src/stm32g4xx_${module}.c)
 endforeach()
 target_include_directories(sharp_lcd PRIVATE Core/Inc ${HAL}/Inc ${DEVICE}/Include Drivers/CMSIS_5/CMSIS/Core/Include

@@ -1,5 +1,9 @@
 # USB CDC diagnosztika — WeAct Studio STM32G4 Core Board
 
+**A `fix/minimal-spi-bringup` branchen a USB alapból ki van kapcsolva.**
+Ezért nem jelenik meg COM-port. Az itt leírt funkció `SHARP_USB_DIAG=ON`
+konfigurációval állítható vissza; a driverpróba alatt ST-LINK a diagnosztika.
+
 **Aktuális kijelzőteszt:** `SHARP_SIMPLE_BLINK=ON`; csak stage 12 (fehér)
 és stage 13 (fekete) ismétlődik, egyenként 2 s várakozással. DISP végig HIGH.
 A lent felsorolt stage 10/11/14 az elérhető ötfázisú teszt jelentése.

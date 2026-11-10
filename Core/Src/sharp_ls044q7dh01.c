@@ -9,13 +9,11 @@
 
 static void begin(void)
 {
-    /* Always establish inactive SCS and idle clocks before pin muxing.
-     * Serialize all calls in main context; no nested transactions. */
+    /* Serialize calls in main context; no nested transactions. SPI remains
+     * enabled and PA5/PA7 remain AF5 throughout normal operation. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    board_spi_active(0);
     board_wait_extcom_slot();
     board_delay_us(2); /* SCS LOW >=1 us even between adjacent API calls. */
-    board_spi_active(1);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
     board_delay_us(4); /* SCS setup >= 3 us. */
 }
@@ -27,7 +25,7 @@ static HAL_StatusTypeDef end(HAL_StatusTypeDef status)
     if (status != HAL_OK) __HAL_SPI_DISABLE(&hspi1);
     board_delay_us(2); /* SCS hold >= 1 us. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    board_spi_active(0); /* Physically force SCLK and SI LOW between packets. */
+    /* SCLK idles LOW (CPOL=0); final zero dummy bit leaves MOSI LOW. */
     board_delay_us(2);
     return status;
 }

@@ -1,15 +1,21 @@
 #include <stdbool.h>
 #include "board.h"
 #include "sharp_ls044q7dh01.h"
+#ifdef SHARP_USB_DIAG
 #include "usb_diag.h"
+#endif
 
 SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
 volatile uint32_t test_stage;
+volatile HAL_StatusTypeDef last_hal_status;
 
 static void check(HAL_StatusTypeDef s)
 {
+    last_hal_status = s;
+#ifdef SHARP_USB_DIAG
     diag_last_hal_status = s;
+#endif
     if (s != HAL_OK) Error_Handler();
 }
 
@@ -18,19 +24,6 @@ void board_delay_us(uint32_t us)
     uint32_t start = DWT->CYCCNT;
     uint32_t cycles = us * (SystemCoreClock / 1000000U);
     while ((uint32_t)(DWT->CYCCNT - start) < cycles) { }
-}
-
-void board_spi_active(uint32_t active)
-{
-    GPIO_InitTypeDef g = {0};
-    if (!active) __HAL_SPI_DISABLE(&hspi1);
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5 | GPIO_PIN_7, GPIO_PIN_RESET);
-    g.Pin = GPIO_PIN_5 | GPIO_PIN_7;
-    g.Mode = active ? GPIO_MODE_AF_PP : GPIO_MODE_OUTPUT_PP;
-    g.Pull = GPIO_NOPULL;
-    g.Speed = GPIO_SPEED_FREQ_HIGH;
-    g.Alternate = GPIO_AF5_SPI1;
-    HAL_GPIO_Init(GPIOA, &g);
 }
 
 void board_wait_extcom_slot(void)
@@ -44,7 +37,9 @@ void board_wait_extcom_slot(void)
      * Main-context-only blocking function; TIM3 must be running. */
     uint32_t count;
     do {
+#ifdef SHARP_USB_DIAG
         usb_diag_poll();
+#endif
         count = __HAL_TIM_GET_COUNTER(&htim3);
     } while (count < 502U || count > 800U);
 }
@@ -90,7 +85,11 @@ static void spi_init(void)
     __HAL_RCC_SPI1_CLK_ENABLE();
     hspi1.Instance = SPI1;
     hspi1.Init.Mode = SPI_MODE_MASTER;
-    hspi1.Init.Direction = SPI_DIRECTION_1LINE;
+    /* Normal full-duplex master, but receive data is unused. PA6/MISO is
+     * left at reset analog mode and is not connected to the LCD. HAL's
+     * blocking transmit clears the expected RX overrun at transfer end.
+     * Unlike 1LINE, this mode does not disable/re-enable SPI per HAL call. */
+    hspi1.Init.Direction = SPI_DIRECTION_2LINES;
     hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
     hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
@@ -105,6 +104,18 @@ static void spi_init(void)
     hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
     hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
     check(HAL_SPI_Init(&hspi1));
+    /* Enable the peripheral before routing its idle outputs to the pins.
+     * PA5/PA7 stay AF5 for normal operation; only SCS is toggled per packet.
+     * CPOL=0 holds SCLK LOW. Every packet ends with zero dummy data, so
+     * MOSI's final transmitted bit is LOW and remains LOW between packets. */
+    __HAL_SPI_ENABLE(&hspi1);
+    GPIO_InitTypeDef g = {0};
+    g.Pin = GPIO_PIN_5 | GPIO_PIN_7;
+    g.Mode = GPIO_MODE_AF_PP;
+    g.Pull = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
+    g.Alternate = GPIO_AF5_SPI1;
+    HAL_GPIO_Init(GPIOA, &g);
 }
 
 static void timer_init(void)
@@ -143,17 +154,23 @@ static void hold_image(uint32_t ms)
 {
     /* LD-2025315 6-5-3 Note 6-5-2: no SPI keepalive is needed in external
      * COM mode while holding an image. SCS/SCLK/SI remain physically LOW. */
+#ifdef SHARP_USB_DIAG
     uint32_t start = HAL_GetTick();
     while ((uint32_t)(HAL_GetTick() - start) < ms) {
         usb_diag_poll();
         HAL_Delay(1);
     }
+#else
+    HAL_Delay(ms);
+#endif
 }
 
 int main(void)
 {
+#ifdef SHARP_USB_DIAG
     diag_reset_flags = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
+#endif
     HAL_Init();
     gpio_init();
     clock_init();
@@ -163,18 +180,20 @@ int main(void)
     spi_init();
     timer_init();
     /* Absence/failure of USB must never stop external COM or the LCD test. */
+#ifdef SHARP_USB_DIAG
     diag_usb_status = usb_diag_init();
+#endif
     test_stage = 1;
     check(sharp_init());
 #if defined(SHARP_SIMPLE_BLINK)
     /* Continuous DISP HIGH; no long blanking/clear phases that could be
      * mistaken for a stopped test. Keep SPI timing and COM unchanged. */
     for (;;) {
-        test_stage = 12;
-        check(sharp_fill(true));
-        hold_image(2000);
         test_stage = 13;
         check(sharp_fill(false));
+        hold_image(2000);
+        test_stage = 12;
+        check(sharp_fill(true));
         hold_image(2000);
     }
 #elif defined(SHARP_DIAGNOSTIC_LOOP)
@@ -224,9 +243,21 @@ void Error_Handler(void)
     test_stage = 0xFFFFFFFFU;
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
-    board_spi_active(0);
+    /* Fatal-error exception only: stop SPI and force physical idle LOW.
+     * There is no GPIO/AF switching on the normal transaction path. */
+    __HAL_SPI_DISABLE(&hspi1);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5 | GPIO_PIN_7, GPIO_PIN_RESET);
+    GPIO_InitTypeDef g = {0};
+    g.Pin = GPIO_PIN_5 | GPIO_PIN_7;
+    g.Mode = GPIO_MODE_OUTPUT_PP;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOA, &g);
     /* Do not stop TIM3: inversion remains available after runtime errors. */
-    for (;;) { usb_diag_poll(); }
+    for (;;) {
+#ifdef SHARP_USB_DIAG
+        usb_diag_poll();
+#endif
+    }
 }
 void HardFault_Handler(void) { Error_Handler(); }
 void MemManage_Handler(void) { Error_Handler(); }

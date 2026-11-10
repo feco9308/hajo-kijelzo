@@ -1,5 +1,10 @@
 # Review request: LS044Q7DH01 hardware bring-up
 
+**Review follow-up branch:** `fix/minimal-spi-bringup` addresses the 1LINE and
+per-packet GPIO/AF switching concerns, and defaults to an USB-free minimal
+test. See `MINIMAL_BRINGUP.md`. The observations below describe the original
+`65279da` baseline; the root cause remains unconfirmed.
+
 ## Current status — 2026-11-10
 
 **The LCD is not yet working reliably.** Successful build/flash or an OK HAL

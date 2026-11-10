@@ -1,5 +1,21 @@
 # Hajó kijelző / Boat display bring-up
 
+## Current review branch: `fix/minimal-spi-bringup`
+
+The default build is now **USB-free**, with normal **2-line SPI master** and
+PA5/PA7 permanently in AF5 after initialization. PA6/MISO is not connected or
+configured. PA4 remains an active-HIGH GPIO. SPI stays enabled throughout
+normal packets and between the HAL transmit calls within a full frame.
+The test repeats **black → 2 s → white → 2 s**, with continuous DISP HIGH.
+SPI is still 250 kHz to isolate the software changes from a frequency change.
+The Sharp framing and external-COM phase guard are unchanged.
+
+USB CDC is retained as an optional build: `-DSHARP_USB_DIAG=ON`. In the default
+OFF build the USB stack, PCD, HSI48/CRS setup and USB IRQs are absent, and **no
+COM-port will appear**. ST-LINK can inspect `test_stage` and `last_hal_status`.
+The older USB/diagnostic sections below describe optional/historical modes.
+See [minimal bring-up review](MINIMAL_BRINGUP.md) for changes and validation.
+
 Minimal STM32 HAL firmware for a **WeAct Studio STM32G4 Core Board
 (STM32G431CBU6)** driving a **Sharp LS044Q7DH01** 320x240 monochrome Memory LCD.
 
