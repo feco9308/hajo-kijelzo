@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include "board.h"
 #include "sharp_ls044q7dh01.h"
+#include "usb_diag.h"
+#include "usb_manual.h"
 
 SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
@@ -11,6 +13,7 @@ volatile HAL_StatusTypeDef last_hal_status;
 static void check(HAL_StatusTypeDef s)
 {
     last_hal_status = s;
+    diag_last_hal_status = s;
     if (s != HAL_OK) Error_Handler();
 }
 
@@ -172,35 +175,19 @@ int main(void)
     spi_init();
     timer_init();
     check(board_extcom_start()); /* 1 Hz starts BEFORE All Clear. */
+    diag_reset_flags = RCC->CSR;
+    __HAL_RCC_CLEAR_RESET_FLAGS();
+    diag_usb_status = usb_diag_init();
     test_stage = 1;
     check(sharp_init());         /* All Clear, then DISP HIGH. */
 
-    uint8_t row[SHARP_LINE_BYTES]; /* Only one row, not a framebuffer. */
+    test_stage = 11; /* Cleared; manual mode, no automatic image writes. */
+    test_line = 0;
     for (;;) {
-        test_stage = 20;
-        test_line = 0;
-        check(sharp_clear());
-        HAL_Delay(1000);
-
-        for (unsigned i = 0; i < sizeof row; ++i) row[i] = 0x00;
-        test_stage = 21;
-        for (uint16_t line = 1; line <= SHARP_HEIGHT; ++line) {
-            test_line = line;
-            check(sharp_write_line(line, row));
-            HAL_Delay(40); /* About 10 seconds for the entire black sweep. */
-        }
-        test_stage = 22;
-        HAL_Delay(2000);
-
-        for (unsigned i = 0; i < sizeof row; ++i) row[i] = 0xFF;
-        test_stage = 23;
-        for (uint16_t line = 1; line <= SHARP_HEIGHT; ++line) {
-            test_line = line;
-            check(sharp_write_line(line, row));
-            HAL_Delay(40);
-        }
-        test_stage = 24;
-        HAL_Delay(2000);
+        usb_diag_poll();
+        usb_manual_poll();
+        usb_auto_poll();
+        HAL_Delay(1);
     }
 }
 
@@ -224,8 +211,7 @@ void Error_Handler(void)
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &g);
     /* Do not stop TIM3: inversion remains available after runtime errors. */
-    for (;;) {
-    }
+    for (;;) { usb_diag_poll(); }
 }
 void HardFault_Handler(void) { Error_Handler(); }
 void MemManage_Handler(void) { Error_Handler(); }

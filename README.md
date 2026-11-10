@@ -1,6 +1,59 @@
 ﻿# Hajó kijelző — line-by-line black/white sweep
 
-Branch: `test/line-by-line`.
+Current branch: `feat/usb-control-swapped-pins`.
+
+**USB manual mode is now the default.** Wiring remains PB0=DISP,
+PB1=EXTCOMIN/TIM3_CH4, EXTMODE pin8=5 V. There are no automatic image changes
+after startup Clear. The historical sweep below runs only after `auto`.
+
+## USB commands
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\usb-console.ps1 -Port COM10
+```
+
+Type one command + Enter and wait for OK/ERR. `exit` closes the console.
+The console reconnects after USB loss without replaying commands. One program
+can open the port at a time; the COM number may differ on another machine.
+
+| Command | Effect |
+|---|---|
+| clear / torles | All Clear, white memory |
+| black / fekete | full black |
+| white / feher | full white |
+| pattern / invert | normal / inverted vertical bars |
+| off / on | DISP off/on, preserving image memory |
+| auto | start repeating line-by-line black/white sweep |
+| stop | stop sweep, hold the current partial image |
+| status | report state without changing the image or stopping auto |
+| help | show commands |
+
+Image/off/on commands stop auto. Invalid input does not change auto state.
+Auto is a state machine, servicing USB between lines and during holds. Stop
+takes effect after an executing packet/COM guard. A full-frame command may
+wait up to about 0.8 s; on/auto can also wait for a safe COM rising edge.
+
+Status includes stage, last auto line, auto flag, MCU-side DISP/EXTCOMIN,
+configured extmode=1, TIM3, HAL/SPI errors, SPI clock and dropped RX count.
+OK is an MCU result, not LCD acknowledgement. RX supports 47 ASCII characters
+per CR/LF-terminated command, with three queued slots; overlong input is
+rejected. All LCD/SPI work runs in main, not in the USB IRQ.
+
+Current build: 25956 B flash, 5488 B SRAM including stack reserve, no compiler
+or linker warnings. Flash/readback and real COM10 tests passed: all commands,
+fragmented RX/CRLF, case/space handling, invalid/overlong input, TIM3 with DISP
+off, auto progression, stop holding the line, and manual image hold.
+`scripts/test-usb-manual.ps1` repeats the test and leaves the image cleared.
+
+One-shot command: `scripts/usb-console.ps1 -Port COM10 -Command clear`.
+Terminal: 115200 8N1, DTR on, no flow control.
+Source: `USB/Src/usb_manual.c` and `USB/Src/usb_diag.c`.
+
+## Historical USB-free sweep below
+
+The pin mapping and LCD timing remain the same in USB mode; external COM
+continues from hardware independently of USB. Size/no-USB details below
+describe the prior `test/line-by-line` revision.
 
 The test clears the panel to white, then cumulatively writes one black line
 at a time, addresses 1..240. After 2 s full black it writes the same lines
