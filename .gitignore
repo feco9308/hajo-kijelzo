@@ -1,0 +1,10 @@
+/build/
+/build-st/
+/tmp/
+# Local reference material and captures.
+/*.pdf
+/*.mp4
+/*.jpg
+/*.png
+/*.zip
+*.log
