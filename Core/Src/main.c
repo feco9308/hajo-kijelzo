@@ -130,7 +130,7 @@ static void timer_init(void)
     oc.Pulse = 500;
     oc.OCPolarity = TIM_OCPOLARITY_HIGH;
     oc.OCFastMode = TIM_OCFAST_DISABLE;
-    check(HAL_TIM_PWM_ConfigChannel(&htim3, &oc, TIM_CHANNEL_3));
+    check(HAL_TIM_PWM_ConfigChannel(&htim3, &oc, TIM_CHANNEL_4));
     /* Keep hardware inversion running during debugger halts. */
     __HAL_DBGMCU_UNFREEZE_TIM3();
 }
@@ -138,13 +138,13 @@ static void timer_init(void)
 HAL_StatusTypeDef board_extcom_start(void)
 {
     GPIO_InitTypeDef g = {0};
-    g.Pin = GPIO_PIN_0;
+    g.Pin = GPIO_PIN_1; /* Confirmed wiring: PB1 -> EXTCOMIN, TIM3_CH4. */
     g.Mode = GPIO_MODE_AF_PP;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     g.Alternate = GPIO_AF2_TIM3;
     __HAL_TIM_SET_COUNTER(&htim3, 0);
     HAL_GPIO_Init(GPIOB, &g);
-    return HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+    return HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 }
 
 /* This is the entire application: no USB, test-mode selection or UI. */
@@ -163,12 +163,18 @@ int main(void)
     check(sharp_init());         /* All Clear, then DISP HIGH. */
 
     for (;;) {
-        test_stage = 13;
-        check(sharp_fill(false));
-        HAL_Delay(2000);
         test_stage = 12;
         check(sharp_fill(true));
-        HAL_Delay(2000);
+        HAL_Delay(3000);
+        test_stage = 13;
+        check(sharp_fill(false));
+        HAL_Delay(3000);
+        test_stage = 14;
+        check(sharp_test_pattern());
+        HAL_Delay(3000);
+        test_stage = 15;
+        check(sharp_test_pattern_inverted());
+        HAL_Delay(3000);
     }
 }
 
@@ -180,7 +186,7 @@ void _fini(void) { }
 void Error_Handler(void)
 {
     test_stage = 0xFFFFFFFFU;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); /* DISP. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     /* Fatal-error exception only: stop SPI and force physical idle LOW.
      * There is no GPIO/AF switching on the normal transaction path. */

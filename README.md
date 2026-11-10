@@ -1,90 +1,62 @@
-# Hajó kijelző — minimal black/white test
+﻿# Hajó kijelző — swapped-pin stripe test
 
-Branch: `test/minimal-black-white`.
+Branch: `test/swapped-pins-stripes`.
 
-This branch runs only the requested bring-up sequence:
+**User-confirmed current wiring:** PB0 goes to LCD DISP (pin 5), PB1 goes to
+LCD EXTCOMIN (pin 4), EXTMODE (pin 8) is tied to LCD VDD / 5 V.
+The firmware is deliberately configured for this swapped wiring.
 
-```text
-STM32 startup
-SPI1 normal 2-line master, 1 MHz, mode 0, LSB first
-TIM3 EXTCOMIN hardware 1 Hz / 50% starts
-All Clear
-DISP HIGH
-full black -> wait 2 s -> full white -> wait 2 s -> repeat
-```
-
-There is no USB, mode selection, checkerboard call, framebuffer or UI in the
-application. `Core/Src/main.c` contains the entire application loop.
-The older USB source and reports remain as reference files but are not built.
-
-## Hardware
-
-WeAct Studio STM32G4 Core Board, STM32G431CBU6.
-Sharp LS044Q7DH01, 320x240 monochrome Memory LCD.
-
-| STM32 | LCD | Mode |
+| MCU | LCD | Configuration |
 |---|---|---|
-| PA5 | SCLK | permanent AF5 SPI1, 1 MHz |
-| PA7 | SI/MOSI | permanent AF5 SPI1 |
+| PA5 | SCLK | SPI1 AF5, 1 MHz, mode 0 |
+| PA7 | SI | SPI1 AF5, hardware LSB-first |
 | PA4 | SCS | GPIO, active HIGH |
-| PB0 | EXTCOMIN | AF2 TIM3_CH3, nominal 1 Hz / 50% |
-| PB1 | DISP | GPIO, LOW at startup, then continuously HIGH |
-| — | EXTMODE | fixed to LCD VDD, 5 V |
-| — | VDD / VDDA | both 5 V |
-| — | VSS / VSSA | common GND |
+| **PB0** | **DISP, LCD pin 5** | GPIO, LOW at startup, then continuously HIGH |
+| **PB1** | **EXTCOMIN, LCD pin 4** | **AF2 TIM3_CH4**, 1 Hz / 50% duty |
+| — | EXTMODE, LCD pin 8 | fixed to 5 V / LCD VDD |
+| — | VDD and VDDA | 5 V |
+| — | VSS and VSSA | common GND |
 
-MCU power and signals are 3.3 V. PA6/MISO stays analog and unconnected.
-External 10 kΩ pulldowns on the five LCD control signals provide LOW during
-MCU reset. Stable LCD power and correct supply sequencing are hardware
-prerequisites; the firmware has no LCD power switch or power-good signal.
+MCU supply/signals remain 3.3 V; MISO/PA6 is unconnected. SPI is normal 2-line
+master. PA5/PA7 remain AF5. Only SCS toggles for a packet. Zero dummy data and
+CPOL=0 keep SI/SCLK LOW at idle. External pulldowns are needed during reset.
 
-## Initialization details
+## Repeating sequence
 
-EXTCOMIN starts before All Clear, while DISP remains LOW. After Clear and
-its guard delay, DISP goes HIGH. Startup waits for the next external COM
-rising edge and its initialization guard before the first image write.
-The driver retains the datasheet COM-safe phase guard around transactions.
-Image transfer and phase alignment add time to the 2 s application waits.
+After safe GPIO initialization, hardware EXTCOMIN start, All Clear and DISP
+HIGH, the firmware repeats:
 
-The Sharp framing is unchanged: active-HIGH SCS, LSB-first mode/address/pixel
-bytes, 24 clocks for All Clear, 16 transfer clocks after the last line.
-Normal transactions never disable SPI or change PA5/PA7 GPIO modes.
+1. Full white, hold 3 s (stage 12).
+2. Full black, hold 3 s (stage 13).
+3. Vertical bars, 8 pixels wide, hold 3 s (stage 14).
+4. Inverted bars, hold 3 s (stage 15).
 
-## Build and flash
+There are 40 alternating bars across 320 pixels, identical across all 240 rows.
+Transfer/COM-phase alignment adds time to the holds. The loop does not stop.
+DISP is continuously HIGH after startup; it is not the 1 Hz signal.
+No USB, console or framebuffer is built. EXTMODE=HIGH means M1 stays 0.
+
+## Build / flash
 
 ```sh
-git clone --branch test/minimal-black-white --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
-cd hajo-kijelzo
+git clone --branch test/swapped-pins-stripes --recurse-submodules https://github.com/feco9308/hajo-kijelzo.git
 ```
-
-Dependencies are pinned Git submodules. Windows bootstrap if required:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1
+.\scripts\bootstrap.ps1
+.\scripts\build.ps1
+.\scripts\flash.ps1
 ```
 
-Build requires Arm GNU Toolchain, CMake and Ninja. Flash uses ST-LINK and
-STM32CubeProgrammer and replaces the existing firmware. VS Code Ctrl+Shift+B
-runs the build. Artifacts are under `build-st/`.
+Flashing replaces the current firmware. ST-LINK, Arm GNU Toolchain, CMake and
+Ninja required. Output under `build-st/`. Target: STM32G431CBU6, 128 KiB flash,
+22 KiB contiguous SRAM, initial SP=0x20005800. Build: 8136 B flash, 2248 B SRAM
+including stack reserve, no compiler/linker warnings.
 
-ST startup/linker target STM32G431CBU6: 128 KiB flash, 22 KiB contiguous SRAM;
-initial SP=0x20005800. CCM RAM is unused. HSI16 supplies SYSCLK/SPI/TIM3.
+The original firmware expected PB0=EXTCOMIN and PB1=DISP. With physically
+swapped wires, that old program could route 1 Hz to DISP and cause whole-panel
+blinking. A visible response in that state alone does not validate image data.
+This revision puts the PWM on PB1/TIM3_CH4 and stable DISP on PB0.
 
-## Validation and current fault
-
-Build: 8080 B flash, 2248 B SRAM including 2 KiB stack reserve, no compiler or
-linker warnings. USB/PCD/CDC and checkerboard symbols are absent from the ELF.
-The LCD's actual optical response still needs confirmation.
-
-No COM port is expected in this test. ST-LINK variables:
-`test_stage=1` initialization, `13` black, `12` white,
-`0xFFFFFFFF` error. `last_hal_status=0` means HAL_OK, not LCD acknowledgement.
-
-Before this branch, the user observed uneven whole-panel flicker and sometimes
-an unchanged/corrupt image. The 5 V rails were measured; connector-level
-DISP/EXTMODE/EXTCOMIN/SPI timing still needs verification if the issue persists.
-Older reviews and reports describe earlier firmware settings, not this exact
-minimal test. The prior change is on `fix/minimal-spi-bringup`; the original
-USB diagnostic baseline is on `main`.
+Older reports/docs describe historical wiring and modes. This README defines
+the current configuration. Actual optical success still requires observation.

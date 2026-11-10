@@ -18,6 +18,7 @@ HAL_StatusTypeDef sharp_clear(void);
 HAL_StatusTypeDef sharp_fill(bool white);
 HAL_StatusTypeDef sharp_write_line(uint16_t line, const uint8_t *data);
 HAL_StatusTypeDef sharp_test_pattern(void);
+HAL_StatusTypeDef sharp_test_pattern_inverted(void);
 HAL_StatusTypeDef sharp_keepalive(void);
 #ifdef __cplusplus
 }

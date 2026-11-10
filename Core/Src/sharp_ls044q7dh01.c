@@ -49,7 +49,7 @@ HAL_StatusTypeDef sharp_keepalive(void) { return command(0x00); }
 
 HAL_StatusTypeDef sharp_init(void)
 {
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); /* PB0 -> DISP. */
     /* Board has no LCD power switch/power-good input. Both LCD rails must
      * already be stable before entering here. Firmware cannot enforce this. */
     HAL_Delay(100);
@@ -59,7 +59,7 @@ HAL_StatusTypeDef sharp_init(void)
      * Keep a conservative 50 ms guard after the completed command. */
     HAL_Delay(50);
     /* Main has already started the hardware EXTCOMIN timer, before clear. */
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
     HAL_Delay(1); /* TCOM latch release >=100 us. */
     board_wait_next_extcom_rise(); /* T4 >=100 us after next rising edge. */
     return HAL_OK;
@@ -86,8 +86,9 @@ static HAL_StatusTypeDef screen(bool white, bool pattern)
     for (uint16_t y = 1; y <= SHARP_HEIGHT && s == HAL_OK; ++y) {
         row[0] = (uint8_t)y;
         for (unsigned x = 0; x < SHARP_LINE_BYTES; ++x) {
-            /* 16x16 checkerboard, first square white. */
-            bool w = pattern ? (((x / 2 + (y - 1) / 16) & 1) == 0) : white;
+            /* Eight-pixel vertical bars, identical on all 240 lines.
+             * In pattern mode, white selects inversion of the bars. */
+            bool w = pattern ? ((((x & 1U) == 0U) != white)) : white;
             row[x + 1] = w ? 0xFF : 0x00;
         }
         row[41] = 0;
@@ -99,3 +100,4 @@ static HAL_StatusTypeDef screen(bool white, bool pattern)
 }
 HAL_StatusTypeDef sharp_fill(bool white) { return screen(white, false); }
 HAL_StatusTypeDef sharp_test_pattern(void) { return screen(false, true); }
+HAL_StatusTypeDef sharp_test_pattern_inverted(void) { return screen(true, true); }
