@@ -74,7 +74,7 @@ static void spi_init(void)
     hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
     hspi1.Init.NSS = SPI_NSS_SOFT; /* PA4 is GPIO: active HIGH. */
-    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16; /* 1 MHz. */
+    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64; /* 250 kHz diagnostic trial. */
     hspi1.Init.FirstBit = SPI_FIRSTBIT_LSB;
     hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
     hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -130,11 +130,12 @@ HAL_StatusTypeDef board_extcom_start(void)
 void board_wait_extcom_slot(void)
 {
     if (!(TIM3->CR1 & TIM_CR1_CEN)) return;
-    /* Send after a rising edge, leaving >=700 ms until the next one.
-     * A complete image needs ~81 ms; do not defer a COM edge with SCS. */
+    /* Each transaction now contains at most one row: 44 bytes at 250 kHz
+     * takes 1.408 ms. Avoid 3 ms before and 2 ms after the COM rising
+     * edge at CNT=500; this leaves SCS LOW at every COM edge. */
     uint32_t count;
     do { count = __HAL_TIM_GET_COUNTER(&htim3); }
-    while (count < 502U || count > 800U);
+    while (count >= 497U && count < 502U);
 }
 
 void board_wait_next_extcom_rise(void)

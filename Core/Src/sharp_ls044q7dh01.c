@@ -84,25 +84,21 @@ HAL_StatusTypeDef sharp_write_line(uint16_t line, const uint8_t *data)
 
 static HAL_StatusTypeDef screen(bool white, bool pattern)
 {
-    uint8_t row[42]; /* address + 40 pixels bytes + 8 dummy clocks */
-    const uint8_t update = 0x01;
-    const uint8_t final_dummy = 0;
-    begin();
-    HAL_StatusTypeDef s = tx(&update, 1);
-    for (uint16_t y = 1; y <= SHARP_HEIGHT && s == HAL_OK; ++y) {
-        row[0] = (uint8_t)y;
-        for (unsigned x = 0; x < SHARP_LINE_BYTES; ++x) {
-            /* Eight-pixel vertical bars, identical on all 240 lines.
-             * In pattern mode, white selects inversion of the bars. */
-            bool w = pattern ? ((((x & 1U) == 0U) != white)) : white;
-            row[x + 1] = w ? 0xFF : 0x00;
-        }
-        row[41] = 0;
-        s = tx(row, sizeof row);
-        /* Next address provides the other 8 transfer clocks for this line. */
+    uint8_t pixels[SHARP_LINE_BYTES];
+    for (unsigned x = 0; x < SHARP_LINE_BYTES; ++x) {
+        /* Eight-pixel vertical bars; white selects inversion in pattern mode. */
+        bool w = pattern ? ((((x & 1U) == 0U) != white)) : white;
+        pixels[x] = w ? 0xFF : 0x00;
     }
-    if (s == HAL_OK) s = tx(&final_dummy, 1);
-    return end(s);
+    /* Diagnostic isolation: no multi-row chaining and no framebuffer.
+     * Each row is its own active-HIGH SCS transaction with one blocking
+     * HAL transmit: 01, address, 40 pixels bytes, 00, 00 = 352 clocks.
+     * COM continues independently between and during writes. */
+    for (uint16_t y = 1; y <= SHARP_HEIGHT; ++y) {
+        HAL_StatusTypeDef s = sharp_write_line(y, pixels);
+        if (s != HAL_OK) return s;
+    }
+    return HAL_OK;
 }
 HAL_StatusTypeDef sharp_fill(bool white) { return screen(white, false); }
 HAL_StatusTypeDef sharp_test_pattern(void) { return screen(false, true); }

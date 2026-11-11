@@ -28,7 +28,7 @@ try {
     Start-Sleep -Milliseconds 80
     $serial.Write("ck`r`n")
     [void](Await-Reply '(?m)^OK black HAL=0\r?\n')
-    $state = Send-Test 'status' '(?m)^STATUS .*stage=13 .*disp=1 .*spi_hz=1000000 .*\n'
+    $state = Send-Test 'status' '(?m)^STATUS .*stage=13 .*disp=1 .*spi_hz=250000 .*\n'
     [void](Send-Test ' WHITE ' '(?m)^OK white HAL=0\r?\n')
     [void](Send-Test 'status' '(?m)^STATUS .*stage=12 .*\n')
     [void](Send-Test 'off' '(?m)^OK off DISP=0 .*\n')

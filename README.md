@@ -1,3 +1,19 @@
+## Active diagnostic: 250 kHz, separate transaction for every row
+
+Same wiring and external COM startup as the previous Techtoys-style test:
+PB0 -> LCD pin4 EXTCOMIN (TIM3_CH3, 1Hz/50%), PB1 -> pin5 DISP,
+pin8 EXTMODE -> VDD/5V. PA4=SCS active HIGH, PA5=SCLK, PA7=SI.
+Two All Clears at startup; M1 stays zero. USB commands are unchanged.
+
+Only the SPI speed and image-write transaction structure changed:
+16MHz / 64 = 250kHz; each row sends 01, row address (1..240), 40 pixel
+bytes, 00, 00 under its own SCS HIGH pulse. 44 bytes = 352 clocks =
+1.408ms per row, approximately 338ms per image plus software/COM guards.
+The COM guard avoids CNT497..501 around the rising edge at CNT500.
+No continuous multi-row SCS pulse remains. Pixel patterns are unchanged.
+This is a diagnostic comparison, not verified working LCD operation.
+Earlier sections below describe historical firmware.
+
 ## Active test: Techtoys-style external COM startup
 
 LCD pin8 EXTMODE -> VDD (5V), pin4 EXTCOMIN -> PB0 (TIM3_CH3 AF2),
