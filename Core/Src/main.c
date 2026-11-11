@@ -3,6 +3,7 @@
 #include "sharp_ls044q7dh01.h"
 #include "usb_diag.h"
 #include "usb_manual.h"
+#include "debug_control.h"
 
 SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
@@ -164,6 +165,7 @@ int main(void)
     test_stage = 11; /* Cleared; manual mode, no automatic image writes. */
     test_line = 0;
     for (;;) {
+        debug_control_poll();
         usb_diag_poll();
         usb_manual_poll();
         usb_auto_poll();
