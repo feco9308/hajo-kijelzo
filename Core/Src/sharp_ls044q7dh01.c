@@ -107,4 +107,3 @@ static HAL_StatusTypeDef screen(bool white, bool pattern)
 HAL_StatusTypeDef sharp_fill(bool white) { return screen(white, false); }
 HAL_StatusTypeDef sharp_test_pattern(void) { return screen(false, true); }
 HAL_StatusTypeDef sharp_test_pattern_inverted(void) { return screen(true, true); }
-
