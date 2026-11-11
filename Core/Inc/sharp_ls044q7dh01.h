@@ -8,7 +8,7 @@ extern "C" {
 #define SHARP_WIDTH 320U
 #define SHARP_HEIGHT 240U
 #define SHARP_LINE_BYTES 40U
-/* Blocking API, main context only. May wait up to ~702 ms for COM-safe phase.
+/* Blocking API, main context only. EXTMODE must be GND; EXTCOMIN held LOW.
  * No framebuffer, no heap.
  * line: 1..240. data: 40 bytes; bit0 is the first pixel of each byte.
  * 1 = white, 0 = black. Returns HAL_ERROR for invalid arguments.
@@ -20,6 +20,10 @@ HAL_StatusTypeDef sharp_write_line(uint16_t line, const uint8_t *data);
 HAL_StatusTypeDef sharp_test_pattern(void);
 HAL_StatusTypeDef sharp_test_pattern_inverted(void);
 HAL_StatusTypeDef sharp_keepalive(void);
+/* Service 500 ms serial COM inversion from the main loop. */
+HAL_StatusTypeDef sharp_poll(void);
+extern volatile uint32_t sharp_com_count;
+uint8_t sharp_com_phase(void);
 #ifdef __cplusplus
 }
 #endif

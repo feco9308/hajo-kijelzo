@@ -1,3 +1,19 @@
+## Active firmware: EXTMODE grounded, serial COM inversion
+
+LCD pin 8 EXTMODE must be GND. PB0 -> DISP (pin 5), PB1 -> EXTCOMIN
+(pin 4), held LOW. PA4 -> active-HIGH SCS, PA5 -> SCLK, PA7 -> SI.
+VDD/VDDA remain 5 V. Change wiring only with LCD power off.
+
+The main loop sends a 24-clock hold packet every 500 ms, alternating M1
+(00 00 00 / 02 00 00, LSB-first). This gives a nominal 1 Hz COM cycle.
+Clear and pixel writes carry the same current M1 value; USB commands do not
+independently flip it. COM service runs in manual, stop and off states.
+Blocking full-frame writes can delay a COM edge by approximately 81 ms;
+this version uses main-loop service, not a hard real-time timer SPI interrupt.
+USB commands remain: clear black white pattern invert off on auto stop status help.
+`pattern` is vertical bars. The older notes below describe historical firmware,
+including EXTMODE=5V builds, and do not override this active wiring.
+
 ﻿# Hajó kijelző — line-by-line black/white sweep
 
 Current branch: `feat/usb-control-swapped-pins`.

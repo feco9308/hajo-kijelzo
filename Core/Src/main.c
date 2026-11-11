@@ -24,21 +24,6 @@ void board_delay_us(uint32_t us)
     while ((uint32_t)(DWT->CYCCNT - start) < cycles) { }
 }
 
-void board_wait_extcom_slot(void)
-{
-    if ((TIM3->CR1 & TIM_CR1_CEN) == 0U) return;
-    /* LD-2025315 6-6-5: a rising EXTCOMIN while SCS is HIGH defers COM
-     * inversion until SCS falls. Start only 2..300 ms after a rising edge.
-     * PWM2 rises at CNT=500; next rise is at CNT=500 in the next period.
-     * This leaves >=700 ms before the next rising edge, above a complete
-     * ~81 ms pixel transfer at 1 MHz plus software overhead.
-     * Main-context-only blocking function; TIM3 must be running. */
-    uint32_t count;
-    do {
-        count = __HAL_TIM_GET_COUNTER(&htim3);
-    } while (count < 502U || count > 800U);
-}
-
 static void gpio_init(void)
 {
     __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -54,26 +39,6 @@ static void gpio_init(void)
     HAL_GPIO_Init(GPIOA, &g);
     g.Pin = GPIO_PIN_0 | GPIO_PIN_1;
     HAL_GPIO_Init(GPIOB, &g);
-}
-
-void board_wait_extcom_line_slot(void)
-{
-    /* A 44-byte single-line packet is 352 us at 1 MHz. Avoid only the
-     * 5 ms region around EXTCOMIN's CNT=500 rising edge, rather than the
-     * broad full-frame window. This keeps the line sweep nearly uniform. */
-    if ((TIM3->CR1 & TIM_CR1_CEN) == 0U) return;
-    uint32_t count;
-    do {
-        count = __HAL_TIM_GET_COUNTER(&htim3);
-    } while (count >= 497U && count < 502U);
-}
-
-void board_wait_next_extcom_rise(void)
-{
-    /* Startup only: wait for a rising edge AFTER DISP was enabled, then
-     * 2 ms of TCOM initialization. PWM2 rises at CNT=500 every period. */
-    while (__HAL_TIM_GET_COUNTER(&htim3) >= 500U) { }
-    while (__HAL_TIM_GET_COUNTER(&htim3) < 502U) { }
 }
 
 static void clock_init(void)
@@ -131,39 +96,6 @@ static void spi_init(void)
     HAL_GPIO_Init(GPIOA, &g);
 }
 
-static void timer_init(void)
-{
-    __HAL_RCC_TIM3_CLK_ENABLE();
-    htim3.Instance = TIM3;
-    htim3.Init.Prescaler = 15999; /* 16 MHz / 16000 = 1 kHz. */
-    htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim3.Init.Period = 999; /* 1 Hz, 500 ms LOW + 500 ms HIGH. */
-    htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-    check(HAL_TIM_PWM_Init(&htim3));
-    TIM_OC_InitTypeDef oc = {0};
-    oc.OCMode = TIM_OCMODE_PWM2; /* Starts LOW at CNT=0. */
-    oc.Pulse = 500;
-    oc.OCPolarity = TIM_OCPOLARITY_HIGH;
-    oc.OCFastMode = TIM_OCFAST_DISABLE;
-    check(HAL_TIM_PWM_ConfigChannel(&htim3, &oc, TIM_CHANNEL_4));
-    /* Keep hardware inversion running during debugger halts. */
-    __HAL_DBGMCU_UNFREEZE_TIM3();
-}
-
-HAL_StatusTypeDef board_extcom_start(void)
-{
-    GPIO_InitTypeDef g = {0};
-    g.Pin = GPIO_PIN_1; /* Confirmed wiring: PB1 -> EXTCOMIN, TIM3_CH4. */
-    g.Mode = GPIO_MODE_AF_PP;
-    g.Speed = GPIO_SPEED_FREQ_HIGH;
-    g.Alternate = GPIO_AF2_TIM3;
-    __HAL_TIM_SET_COUNTER(&htim3, 0);
-    HAL_GPIO_Init(GPIOB, &g);
-    return HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
-}
-
-/* This is the entire application: no USB, test-mode selection or UI. */
 int main(void)
 {
     HAL_Init();
@@ -173,8 +105,7 @@ int main(void)
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     spi_init();
-    timer_init();
-    check(board_extcom_start()); /* 1 Hz starts BEFORE All Clear. */
+    /* EXTMODE=GND: PB1/EXTCOMIN remains GPIO LOW; no PWM. */
     diag_reset_flags = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
     diag_usb_status = usb_diag_init();
@@ -184,6 +115,7 @@ int main(void)
     test_stage = 11; /* Cleared; manual mode, no automatic image writes. */
     test_line = 0;
     for (;;) {
+        check(sharp_poll());
         usb_diag_poll();
         usb_manual_poll();
         usb_auto_poll();
@@ -210,7 +142,7 @@ void Error_Handler(void)
     g.Mode = GPIO_MODE_OUTPUT_PP;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &g);
-    /* Do not stop TIM3: inversion remains available after runtime errors. */
+    /* Fatal SPI errors force DISP LOW; serial inversion cannot continue. */
     for (;;) { usb_diag_poll(); }
 }
 void HardFault_Handler(void) { Error_Handler(); }

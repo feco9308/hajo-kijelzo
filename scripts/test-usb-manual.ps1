@@ -33,11 +33,11 @@ try {
     [void](Send-Test 'status' '(?m)^STATUS .*stage=12 .*\n')
     [void](Send-Test 'off' '(?m)^OK off DISP=0 .*\n')
     $a = Send-Test 'status' '(?m)^STATUS .*disp=0 .*\n'
-    Start-Sleep -Milliseconds 120
+    Start-Sleep -Milliseconds 650
     $b = Send-Test 'status' '(?m)^STATUS .*disp=0 .*\n'
-    $countA = [regex]::Match($a,'tim3=(\d+)').Groups[1].Value
-    $countB = [regex]::Match($b,'tim3=(\d+)').Groups[1].Value
-    if ($countA -eq $countB) { throw 'EXTCOMIN timer did not advance while DISP was off' }
+    $countA = [regex]::Match($a,'com_count=(\d+)').Groups[1].Value
+    $countB = [regex]::Match($b,'com_count=(\d+)').Groups[1].Value
+    if ($countA -eq $countB) { throw 'Serial COM service did not advance while DISP was off' }
     [void](Send-Test 'on' '(?m)^OK on DISP=1 .*\n')
     [void](Send-Test 'pattern' '(?m)^OK pattern HAL=0\r?\n')
     [void](Send-Test 'invert' '(?m)^OK invert HAL=0\r?\n')
@@ -55,7 +55,7 @@ try {
     [void](Send-Test 'clear' '(?m)^OK clear HAL=0\r?\n')
     Start-Sleep -Seconds 3
     [void](Send-Test 'status' '(?m)^STATUS .*stage=11 .*disp=1 .*hal=0 .*spi_err=0 .*\n')
-    Write-Host 'PASS: manual commands, split RX, invalid/overlong input, external COM timer, auto/stop and image hold.'
+    Write-Host 'PASS: manual commands, split RX, invalid/overlong input, serial COM service, auto/stop and image hold.'
 } finally {
     if ($serial.IsOpen) { $serial.Close() }
     $serial.Dispose()
