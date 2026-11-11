@@ -47,7 +47,7 @@ void usb_auto_poll(void)
     last_hal_status = s; diag_last_hal_status = s;
     if (s != HAL_OK) {
         usb_auto_running = 0; test_stage = 0xFFFFFFFFU;
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);
         usb_diag_reply("ERR auto SPI/HAL; DISP forced LOW\r\n");
     }
 }
@@ -78,7 +78,7 @@ void usb_manual_poll(void)
         return;
     }
     if (!strcmp(c, "auto")) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
         HAL_Delay(1);
         auto_phase = 0; auto_due = HAL_GetTick(); usb_auto_running = 1;
         usb_diag_reply("OK auto (line-by-line sweep; stop holds image)\r\n");
@@ -104,11 +104,11 @@ void usb_manual_poll(void)
         s = sharp_test_pattern_inverted(); test_stage = 16; reply = "OK invert HAL=0\r\n";
     } else if (!strcmp(c, "off")) {
         usb_auto_running = 0;
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);
         test_stage = 10; reply = "OK off DISP=0 (serial COM service continues)\r\n";
     } else if (!strcmp(c, "on")) {
         usb_auto_running = 0;
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
         HAL_Delay(1);
         test_stage = 15; reply = "OK on DISP=1 (image memory unchanged)\r\n";
     } else {
@@ -118,7 +118,7 @@ void usb_manual_poll(void)
     last_hal_status = s;
     diag_last_hal_status = s;
     if (s != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);
         test_stage = 0xFFFFFFFFU;
         usb_diag_reply("ERR SPI/HAL; DISP forced LOW; type status\r\n");
     } else {

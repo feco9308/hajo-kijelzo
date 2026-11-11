@@ -105,7 +105,7 @@ int main(void)
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     spi_init();
-    /* EXTMODE=GND: PB1/EXTCOMIN remains GPIO LOW; no PWM. */
+    /* EXTMODE=GND: PB0/EXTCOMIN remains GPIO LOW; no PWM. */
     diag_reset_flags = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
     diag_usb_status = usb_diag_init();
@@ -131,7 +131,7 @@ void _fini(void) { }
 void Error_Handler(void)
 {
     test_stage = 0xFFFFFFFFU;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); /* DISP. */
+    HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET); /* DISP. */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     /* Fatal-error exception only: stop SPI and force physical idle LOW.
      * There is no GPIO/AF switching on the normal transaction path. */

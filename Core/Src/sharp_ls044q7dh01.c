@@ -57,8 +57,8 @@ HAL_StatusTypeDef sharp_keepalive(void) { return command(0x00); }
 HAL_StatusTypeDef sharp_init(void)
 {
     com_bit = 0;
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET); /* EXTCOMIN LOW. */
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); /* PB0 -> DISP. */
+    HAL_GPIO_WritePin(GPIOB, LCD_EXTCOM_PIN, GPIO_PIN_RESET); /* EXTCOMIN LOW. */
+    HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET); /* PB1 -> DISP. */
     /* Board has no LCD power switch/power-good input. Both LCD rails must
      * already be stable before entering here. Firmware cannot enforce this. */
     HAL_Delay(100);
@@ -68,7 +68,7 @@ HAL_StatusTypeDef sharp_init(void)
      * Keep a conservative 50 ms guard after the completed command. */
     HAL_Delay(50);
     /* EXTMODE=LOW: serial M1 replaces the external COM clock. */
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
     HAL_Delay(1); /* TCOM latch release >=100 us. */
     com_due = HAL_GetTick() + 500U;
     return HAL_OK;

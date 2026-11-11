@@ -1,6 +1,6 @@
 ## Active firmware: EXTMODE grounded, serial COM inversion
 
-LCD pin 8 EXTMODE must be GND. PB0 -> DISP (pin 5), PB1 -> EXTCOMIN
+LCD pin 8 EXTMODE must be GND. PB1 -> DISP (pin 5), PB0 -> EXTCOMIN
 (pin 4), held LOW. PA4 -> active-HIGH SCS, PA5 -> SCLK, PA7 -> SI.
 VDD/VDDA remain 5 V. Change wiring only with LCD power off.
 
