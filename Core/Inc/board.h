@@ -8,3 +8,7 @@ void Error_Handler(void);
 /* Actual user wiring: PB0 -> LCD pin4, PB1 -> LCD pin5. */
 #define LCD_DISP_PIN GPIO_PIN_1
 #define LCD_EXTCOM_PIN GPIO_PIN_0
+
+HAL_StatusTypeDef board_extcom_start(void);
+void board_wait_extcom_slot(void);
+void board_wait_next_extcom_rise(void);

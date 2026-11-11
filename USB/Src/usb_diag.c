@@ -164,8 +164,7 @@ void usb_diag_reply_status(void)
     p = append(p, " auto="); p = number(p, usb_auto_running);
     p = append(p, " disp="); p = number(p, (GPIOB->IDR >> 1) & 1U);
     p = append(p, " extcom="); p = number(p, GPIOB->IDR & 1U);
-    p = append(p, " extmode=0 m1="); p = number(p, sharp_com_phase());
-    p = append(p, " com_count="); p = number(p, sharp_com_count);
+    p = append(p, " extmode=1 m1=0 tim3="); p = number(p, TIM3->CNT);
     p = append(p, " cs="); p = number(p, (GPIOA->IDR >> 4) & 1U);
     p = append(p, " hal="); p = number(p, diag_last_hal_status);
     p = append(p, " spi_err="); p = number(p, HAL_SPI_GetError(&hspi1));
@@ -188,7 +187,7 @@ void usb_diag_poll(void)
         memcpy(report, response, length);
         response_pending = false;
     } else if (greeting_pending) {
-        const char *hello = "READY PB1=DISP PB0=EXTCOMIN_LOW EXTMODE=GND. Commands: clear black white pattern invert off on auto stop status help\r\n";
+        const char *hello = "READY PB1=DISP PB0=EXTCOMIN_1HZ EXTMODE=5V. Commands: clear black white pattern invert off on auto stop status help\r\n";
         length = (uint16_t)strlen(hello);
         memcpy(report, hello, length);
         greeting_pending = 0;

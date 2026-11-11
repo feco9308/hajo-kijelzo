@@ -1,3 +1,15 @@
+## Active test: Techtoys-style external COM startup
+
+LCD pin8 EXTMODE -> VDD (5V), pin4 EXTCOMIN -> PB0 (TIM3_CH3 AF2),
+pin5 DISP -> PB1. PA5=SCLK, PA7=SI, PA4=active-HIGH SCS unchanged.
+Do not ground pin4: it is now driven by a timer. Change pin8 only with power off.
+Startup: 100ms rail guard, two 24-clock All Clears, 50ms guard, DISP HIGH,
+1ms guard, start EXTCOMIN 1Hz/50%, wait first rising edge plus 2ms.
+M1 remains zero. SPI stays mode0, LSB-first, 1MHz. USB commands retained.
+Full image and row transactions start in the safe COM window; row sweep
+therefore has pauses near COM cycles. Hardware verification is pending.
+Earlier sections below describe historical builds, not this active profile.
+
 ## Active firmware: EXTMODE grounded, serial COM inversion
 
 LCD pin 8 EXTMODE must be GND. PB1 -> DISP (pin 5), PB0 -> EXTCOMIN

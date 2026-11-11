@@ -79,7 +79,7 @@ void usb_manual_poll(void)
     }
     if (!strcmp(c, "auto")) {
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
-        HAL_Delay(1);
+        HAL_Delay(1); board_wait_next_extcom_rise();
         auto_phase = 0; auto_due = HAL_GetTick(); usb_auto_running = 1;
         usb_diag_reply("OK auto (line-by-line sweep; stop holds image)\r\n");
         return;
@@ -105,11 +105,11 @@ void usb_manual_poll(void)
     } else if (!strcmp(c, "off")) {
         usb_auto_running = 0;
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);
-        test_stage = 10; reply = "OK off DISP=0 (serial COM service continues)\r\n";
+        test_stage = 10; reply = "OK off DISP=0 (external COM timer continues)\r\n";
     } else if (!strcmp(c, "on")) {
         usb_auto_running = 0;
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
-        HAL_Delay(1);
+        HAL_Delay(1); board_wait_next_extcom_rise();
         test_stage = 15; reply = "OK on DISP=1 (image memory unchanged)\r\n";
     } else {
         usb_diag_reply("ERR unknown-command; type help\r\n");

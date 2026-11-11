@@ -96,6 +96,54 @@ static void spi_init(void)
     HAL_GPIO_Init(GPIOA, &g);
 }
 
+/* PB0 AF2 = TIM3_CH3 on STM32G431CBU6. HSI16/APB1=16 MHz. */
+HAL_StatusTypeDef board_extcom_start(void)
+{
+    __HAL_RCC_TIM3_CLK_ENABLE();
+    htim3.Instance = TIM3;
+    htim3.Init.Prescaler = 15999; /* 1 kHz counter. */
+    htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim3.Init.Period = 999; /* 1 Hz. */
+    htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    HAL_StatusTypeDef s = HAL_TIM_PWM_Init(&htim3);
+    if (s != HAL_OK) return s;
+    TIM_OC_InitTypeDef oc = {0};
+    oc.OCMode = TIM_OCMODE_PWM2; /* LOW first 500 ms, HIGH next 500 ms. */
+    oc.Pulse = 500;
+    oc.OCPolarity = TIM_OCPOLARITY_HIGH;
+    oc.OCFastMode = TIM_OCFAST_DISABLE;
+    s = HAL_TIM_PWM_ConfigChannel(&htim3, &oc, TIM_CHANNEL_3);
+    if (s != HAL_OK) return s;
+    GPIO_InitTypeDef g = {0};
+    g.Pin = LCD_EXTCOM_PIN;
+    g.Mode = GPIO_MODE_AF_PP;
+    g.Pull = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
+    g.Alternate = GPIO_AF2_TIM3;
+    __HAL_TIM_SET_COUNTER(&htim3, 0);
+    HAL_GPIO_Init(GPIOB, &g);
+    __HAL_DBGMCU_UNFREEZE_TIM3();
+    return HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+}
+
+void board_wait_extcom_slot(void)
+{
+    if (!(TIM3->CR1 & TIM_CR1_CEN)) return;
+    /* Send after a rising edge, leaving >=700 ms until the next one.
+     * A complete image needs ~81 ms; do not defer a COM edge with SCS. */
+    uint32_t count;
+    do { count = __HAL_TIM_GET_COUNTER(&htim3); }
+    while (count < 502U || count > 800U);
+}
+
+void board_wait_next_extcom_rise(void)
+{
+    if (!(TIM3->CR1 & TIM_CR1_CEN)) return;
+    while (__HAL_TIM_GET_COUNTER(&htim3) >= 500U) { }
+    while (__HAL_TIM_GET_COUNTER(&htim3) < 502U) { }
+}
+
 int main(void)
 {
     HAL_Init();
@@ -105,7 +153,7 @@ int main(void)
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     spi_init();
-    /* EXTMODE=GND: PB0/EXTCOMIN remains GPIO LOW; no PWM. */
+    /* Timer is started by sharp_init after two clears and DISP HIGH. */
     diag_reset_flags = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
     diag_usb_status = usb_diag_init();
@@ -115,7 +163,6 @@ int main(void)
     test_stage = 11; /* Cleared; manual mode, no automatic image writes. */
     test_line = 0;
     for (;;) {
-        check(sharp_poll());
         usb_diag_poll();
         usb_manual_poll();
         usb_auto_poll();
@@ -142,7 +189,7 @@ void Error_Handler(void)
     g.Mode = GPIO_MODE_OUTPUT_PP;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &g);
-    /* Fatal SPI errors force DISP LOW; serial inversion cannot continue. */
+    /* Keep the independent hardware COM timer running on errors. */
     for (;;) { usb_diag_poll(); }
 }
 void HardFault_Handler(void) { Error_Handler(); }
