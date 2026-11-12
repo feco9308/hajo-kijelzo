@@ -1,4 +1,9 @@
-# Automatic white / black hardware test
+# Checkerboard and automatic white / black hardware test
+
+On branch `test/checkerboard`, USB `checkerboard` (alias `sakk`) and
+ST-LINK `scripts/stlink-command.ps1 -Command checkerboard` display static
+16x16-pixel squares, 20 columns by 15 rows, top-left white. The command
+stops automatic white/black updates. After reset the automatic test starts.
 
 Active branch `test/automatic-black-white`: starts on power-up and repeats
 full white (hold 2 seconds), full black (hold 2 seconds). Frame transfer

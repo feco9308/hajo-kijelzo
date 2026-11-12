@@ -44,7 +44,7 @@ void usb_manual_poll(void)
     while (n && c[n - 1] == ' ') c[--n] = 0;
     if (n == 0) return;
     if (!strcmp(c, "help") || !strcmp(c, "?")) {
-        usb_diag_reply("COMMANDS: clear black white pattern invert off on auto stop status help\r\n");
+        usb_diag_reply("COMMANDS: clear black white pattern invert checkerboard off on auto stop status help\r\n");
         return;
     }
     if (!strcmp(c, "status")) { usb_diag_reply_status(); return; }
@@ -82,6 +82,9 @@ void usb_manual_poll(void)
     } else if (!strcmp(c, "invert")) {
         usb_auto_running = 0;
         s = sharp_test_pattern_inverted(); test_stage = 16; reply = "OK invert HAL=0\r\n";
+    } else if (!strcmp(c, "checkerboard") || !strcmp(c, "sakk")) {
+        usb_auto_running = 0;
+        s = sharp_checkerboard(); test_stage = 17; reply = "OK checkerboard HAL=0\r\n";
     } else if (!strcmp(c, "off")) {
         usb_auto_running = 0;
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);

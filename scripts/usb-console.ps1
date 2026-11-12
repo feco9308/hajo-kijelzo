@@ -23,7 +23,7 @@ try {
         throw 'No command response within 5 seconds.'
     }
     Write-Host "LCD manual control on $Port. Enter a command, then press Enter."
-    Write-Host 'clear | black | white | pattern | invert | off | on | auto | stop | status | help'
+    Write-Host 'clear | black | white | pattern | invert | checkerboard | off | on | auto | stop | status | help'
     Write-Host 'The image stays unchanged between commands. Type exit to close.'
     Write-Host -NoNewline '> '
     $line = ''

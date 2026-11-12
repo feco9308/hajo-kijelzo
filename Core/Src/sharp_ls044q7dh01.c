@@ -103,3 +103,20 @@ static HAL_StatusTypeDef screen(bool white, bool pattern)
 HAL_StatusTypeDef sharp_fill(bool white) { return screen(white, false); }
 HAL_StatusTypeDef sharp_test_pattern(void) { return screen(false, true); }
 HAL_StatusTypeDef sharp_test_pattern_inverted(void) { return screen(true, true); }
+
+HAL_StatusTypeDef sharp_checkerboard(void)
+{
+    uint8_t pixels[SHARP_LINE_BYTES];
+    /* 16x16-pixel squares, top-left white. Two bytes per square.
+     * Generate one complete row at a time using the existing line driver. */
+    for (uint16_t line = 1; line <= SHARP_HEIGHT; ++line) {
+        unsigned square_row = (line - 1U) / 16U;
+        for (unsigned x = 0; x < SHARP_LINE_BYTES; ++x) {
+            bool white = ((x / 2U + square_row) & 1U) == 0U;
+            pixels[x] = white ? 0xFF : 0x00;
+        }
+        HAL_StatusTypeDef s = sharp_write_line(line, pixels);
+        if (s != HAL_OK) return s;
+    }
+    return HAL_OK;
+}

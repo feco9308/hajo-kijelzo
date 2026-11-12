@@ -32,6 +32,7 @@ void debug_control_poll(void)
         test_stage = 10;
         break;
     case 8: break; /* Stop: leave pixels and DISP unchanged. */
+    case 9: s = sharp_checkerboard(); test_stage = 17; break;
     default: s = HAL_ERROR; break;
     }
     last_hal_status = s;
