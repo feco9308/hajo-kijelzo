@@ -4,10 +4,19 @@
 #include "usb_diag.h"
 #include "usb_manual.h"
 #include "boat_demo.h"
+#include <stddef.h>
+
+_Static_assert(sizeof(BoatDemoData) == 32U, "SWD data must contain eight 32-bit fields");
+_Static_assert(offsetof(DebugControl, data) == 16U, "SWD data offset must be 16 bytes");
 
 volatile DebugControl lcd_debug;
 extern volatile uint32_t test_stage;
 extern volatile HAL_StatusTypeDef last_hal_status;
+
+void debug_control_init(void)
+{
+    lcd_debug.data = boat_demo_get_data();
+}
 
 void debug_control_poll(void)
 {
@@ -35,6 +44,22 @@ void debug_control_poll(void)
     case 8: break; /* Stop: leave pixels and DISP unchanged. */
     case 9: s = sharp_checkerboard(); test_stage = 17; break;
     case 10: s = boat_demo_show(); test_stage = 18; break;
+    case 11: {
+        BoatDemoData data = lcd_debug.data;
+        if (!boat_demo_data_valid(&data)) {
+            /* Invalid input preserves the current display and applied data. */
+            lcd_debug.data = boat_demo_get_data();
+            lcd_debug.result = 4;
+            lcd_debug.last_command = command;
+            ++lcd_debug.completed;
+            __DMB();
+            lcd_debug.request = 0;
+            return;
+        }
+        s = boat_demo_set_data(&data);
+        test_stage = 18;
+        break;
+    }
     default: s = HAL_ERROR; break;
     }
     last_hal_status = s;
@@ -44,6 +69,7 @@ void debug_control_poll(void)
         test_stage = 0xFFFFFFFFU;
     }
     lcd_debug.result = (uint32_t)s;
+    lcd_debug.data = boat_demo_get_data();
     lcd_debug.last_command = command;
     ++lcd_debug.completed;
     __DMB();

@@ -27,6 +27,7 @@ target_link_options(sharp_lcd PRIVATE -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 
     -T${CMAKE_CURRENT_SOURCE_DIR}/STM32G431CBU6_FLASH.ld --specs=nano.specs --specs=nosys.specs
     -Wl,--gc-sections,-Map=${CMAKE_CURRENT_BINARY_DIR}/sharp_lcd.map -Wl,--print-memory-usage)
 set_target_properties(sharp_lcd PROPERTIES SUFFIX .elf LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/STM32G431CBU6_FLASH.ld)
+target_link_libraries(sharp_lcd PRIVATE m)
 add_custom_command(TARGET sharp_lcd POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:sharp_lcd> ${CMAKE_CURRENT_BINARY_DIR}/sharp_lcd.hex
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:sharp_lcd> ${CMAKE_CURRENT_BINARY_DIR}/sharp_lcd.bin

@@ -2,9 +2,25 @@
 #include "sharp_ls044q7dh01.h"
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
 /* 9600-byte monochrome framebuffer. Same LSB pixel order as the LCD driver. */
 static uint8_t boat_pixels[SHARP_HEIGHT][SHARP_LINE_BYTES];
+static BoatDemoData applied_data = {35, 142, 101, 56, 247, 2, 24, 1};
+
+BoatDemoData boat_demo_get_data(void)
+{
+    return applied_data;
+}
+
+bool boat_demo_data_valid(const BoatDemoData *data)
+{
+    return data != NULL && data->awa_degrees >= -180 && data->awa_degrees <= 180 &&
+           data->aws_tenths <= 999U && data->tws_tenths <= 999U &&
+           data->sog_tenths <= 999U && data->cog_degrees <= 359U &&
+           data->xte_hundredths >= -999 && data->xte_hundredths <= 999 &&
+           data->distance_tenths <= 999U && data->waypoint >= 1U && data->waypoint <= 99U;
+}
 
 typedef struct {
     char character;
@@ -114,28 +130,72 @@ static void circle(int cx, int cy, int radius)
     }
 }
 
-static void wind_dial(void)
+static char *format_unsigned(char *output, uint32_t value)
 {
-    static const int8_t outer_x[12] = {0,31,53,61,53,31,0,-31,-53,-61,-53,-31};
-    static const int8_t outer_y[12] = {-61,-53,-31,0,31,53,61,53,31,0,-31,-53};
-    static const int8_t inner_x[12] = {0,28,48,56,48,28,0,-28,-48,-56,-48,-28};
-    static const int8_t inner_y[12] = {-56,-48,-28,0,28,48,56,48,28,0,-28,-48};
-    circle(88, 106, 61);
-    for (unsigned i = 0; i < 12U; ++i)
-        line(88+inner_x[i],106+inner_y[i],88+outer_x[i],106+outer_y[i]);
-    text(9, 33, "AWA", 1);
-    text(86, 33, "0", 1);
-    /* Boat bow points upwards. Wind arrives from 35 degrees starboard. */
-    line(88,88,78,119); line(78,119,98,119); line(98,119,88,88);
-    line(88,94,88,114);
-    line(123,56,100,88); line(124,57,101,89);
-    line(100,88,102,77); line(100,88,111,83);
-    text(62, 135, "+35", 3);
-    text(72, 173, "DEG", 1);
+    char reversed[10];
+    unsigned count = 0;
+    do {
+        reversed[count++] = (char)('0' + value % 10U);
+        value /= 10U;
+    } while (value != 0U);
+    while (count != 0U) *output++ = reversed[--count];
+    *output = '\0';
+    return output;
 }
 
-HAL_StatusTypeDef boat_demo_show(void)
+static void format_fixed(char *output, int32_t value, unsigned decimals)
 {
+    uint32_t magnitude = value < 0 ? (uint32_t)(-(int64_t)value) : (uint32_t)value;
+    if (value < 0) *output++ = '-';
+    uint32_t divisor = decimals == 2U ? 100U : 10U;
+    output = format_unsigned(output, magnitude / divisor);
+    *output++ = '.';
+    if (decimals == 2U) *output++ = (char)('0' + (magnitude % 100U) / 10U);
+    *output++ = (char)('0' + magnitude % 10U);
+    *output = '\0';
+}
+
+static void wind_dial(int32_t angle)
+{
+    static const int8_t outer_x[12] = {0,27,47,54,47,27,0,-27,-47,-54,-47,-27};
+    static const int8_t outer_y[12] = {-54,-47,-27,0,27,47,54,47,27,0,-27,-47};
+    static const int8_t inner_x[12] = {0,24,42,49,42,24,0,-24,-42,-49,-42,-24};
+    static const int8_t inner_y[12] = {-49,-42,-24,0,24,42,49,42,24,0,-24,-42};
+    circle(88, 98, 54);
+    for (unsigned i = 0; i < 12U; ++i)
+        line(88+inner_x[i],98+inner_y[i],88+outer_x[i],98+outer_y[i]);
+    text(9, 33, "AWA", 1);
+    text(86, 33, "0", 1);
+    line(88,82,78,113); line(78,113,98,113); line(98,113,88,82);
+    line(88,87,88,108);
+
+    /* Positive AWA is starboard. Arrow points inward from the wind source. */
+    float radians = (float)angle * (3.14159265358979323846f / 180.0f);
+    float sine = sinf(radians);
+    float cosine = cosf(radians);
+    int from_x = 88 + (int)(52.0f * sine);
+    int from_y = 98 - (int)(52.0f * cosine);
+    int tip_x = 88 + (int)(21.0f * sine);
+    int tip_y = 98 - (int)(21.0f * cosine);
+    line(from_x, from_y, tip_x, tip_y);
+    line(tip_x, tip_y, tip_x+(int)(10.0f*sine+5.0f*cosine),
+         tip_y+(int)(-10.0f*cosine+5.0f*sine));
+    line(tip_x, tip_y, tip_x+(int)(10.0f*sine-5.0f*cosine),
+         tip_y+(int)(-10.0f*cosine-5.0f*sine));
+
+    char value[12];
+    char *digits = value;
+    if (angle < 0) *digits++ = '-';
+    else *digits++ = '+';
+    format_unsigned(digits, (uint32_t)(angle < 0 ? -angle : angle));
+    int width = (int)strlen(value) * 18 - 3;
+    text(88-width/2, 160, value, 3);
+    text(145, 174, "DEG", 1);
+}
+
+static HAL_StatusTypeDef render(const BoatDemoData *data)
+{
+    char value[16];
     memset(boat_pixels, 0xFF, sizeof boat_pixels);
     line(0,0,319,0); line(319,0,319,239);
     line(319,239,0,239); line(0,239,0,0);
@@ -143,28 +203,56 @@ HAL_StatusTypeDef boat_demo_show(void)
     text(264,6,"DEMO",2);
     line(0,25,319,25);
     line(180,26,180,184);
-    wind_dial();
+    wind_dial(data->awa_degrees);
 
     text(192,33,"AWS",2);
-    text(191,53,"14.2",4);
+    format_fixed(value, (int32_t)data->aws_tenths, 1);
+    text(191,53,value,4);
     text(294,74,"KN",1);
     line(181,91,319,91);
     text(192,98,"TWS",2);
-    text(193,119,"10.1",3);
+    format_fixed(value, (int32_t)data->tws_tenths, 1);
+    text(193,119,value,3);
     text(287,132,"KN",1);
     line(181,149,319,149);
-    text(192,156,"WP01",1);
-    text(192,171,"DST 2.4 NM",1);
+    char waypoint[] = "WP00";
+    waypoint[2] = (char)('0' + data->waypoint / 10U);
+    waypoint[3] = (char)('0' + data->waypoint % 10U);
+    text(192,156,waypoint,1);
+    text(192,171,"DST",1);
+    format_fixed(value, (int32_t)data->distance_tenths, 1);
+    text(216,171,value,1);
+    text(252,171,"NM",1);
 
     line(0,185,319,185);
     line(106,185,106,239); line(213,185,213,239);
-    text(9,193,"SOG",1); text(9,207,"5.6",3); text(80,222,"KN",1);
-    text(115,193,"COG",1); text(115,207,"247",3); text(185,222,"DEG",1);
-    text(222,193,"XTE",1); text(221,207,"0.02",3); text(299,222,"NM",1);
+    text(9,193,"SOG",1);
+    format_fixed(value, (int32_t)data->sog_tenths, 1);
+    text(9,207,value,3); text(80,222,"KN",1);
+    text(115,193,"COG",1);
+    format_unsigned(value, data->cog_degrees);
+    text(115,207,value,3); text(185,222,"DEG",1);
+    text(222,193,"XTE",1);
+    format_fixed(value, data->xte_hundredths, 2);
+    text(221,207,value,strlen(value) > 4U ? 2U : 3U);
+    text(299,222,"NM",1);
 
     for (uint16_t y = 0; y < SHARP_HEIGHT; ++y) {
         HAL_StatusTypeDef s = sharp_write_line(y + 1U, boat_pixels[y]);
         if (s != HAL_OK) return s;
     }
     return HAL_OK;
+}
+
+HAL_StatusTypeDef boat_demo_show(void)
+{
+    return render(&applied_data);
+}
+
+HAL_StatusTypeDef boat_demo_set_data(const BoatDemoData *data)
+{
+    if (!boat_demo_data_valid(data)) return HAL_ERROR;
+    HAL_StatusTypeDef status = render(data);
+    if (status == HAL_OK) applied_data = *data;
+    return status;
 }

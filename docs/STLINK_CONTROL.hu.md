@@ -1,50 +1,57 @@
-# LCD vezérlése ST-LINK/SWD kapcsolaton
+# ST-LINK demóadatok és parancsok
 
-A jelenlegi 250 kHz-es, soronkénti SPI-próba változatlan maradt.
-Az új RAM-parancsfogadó USB-kapcsolat nélkül is használható, az MCU saját
-USB-kábele elhagyható. Az MCU-nak és az LCD-nek ettől még megfelelő táp kell.
-ST-LINK: SWDIO, SWCLK, GND, célpanel feszültségreferencia; NRST ajánlott.
+A normál belépési pont `scripts/send-demo.ps1`. A script a
+`scripts/stlink-command.ps1` közös SWD-kezelését használja. A példákat és
+értéktartományokat a projekt README-je tartalmazza.
 
-PowerShell a projekt gyökerében:
+Az ST-LINK SWDIO, SWCLK, GND és célfeszültség-referencia kapcsolattal
+csatlakozik, NRST a feltöltéshez ajánlott. Az MCU és az LCD tápellátása
+szükséges. Az adatküldés HOTPLUG kapcsolatot használ.
 
-```powershell
-.\scripts\stlink-command.ps1 -Command on
-.\scripts\stlink-command.ps1 -Command black
-.\scripts\stlink-command.ps1 -Command pattern
-.\scripts\stlink-command.ps1 -Command status
-```
+## Adatformátum
 
-További parancsok: clear, white, invert, off, stop. A képírások nem
-kapcsolják be automatikusan a DISP-et; off után előbb on szükséges.
-A script nem resetel vagy állítja meg az MCU-t, HOTPLUG kapcsolatot használ.
-A hardveres EXTCOMIN közben folyamatosan fut.
+A `lcd_debug` RAM-struktúra első négy 32 bites mezője request, result,
+completed, last_command. A 16. byte-tól nyolc 32 bites adatmező következik.
 
-## Megvalósítás és korlátok
+| Index | C-mező | Egység / típus |
+|---:|---|---|
+| 0 | awa_degrees | Előjeles fok, int32 |
+| 1 | aws_tenths | Tized csomó, uint32 |
+| 2 | tws_tenths | Tized csomó, uint32 |
+| 3 | sog_tenths | Tized csomó, uint32 |
+| 4 | cog_degrees | Fok, uint32 |
+| 5 | xte_hundredths | Század tengeri mérföld, int32 |
+| 6 | distance_tenths | Tized tengeri mérföld, uint32 |
+| 7 | waypoint | 1…99, uint32 |
 
-A `lcd_debug` globális struktúra sorrendben négy 32 bites mező:
-request, result, completed, last_command. A debugger csak a request mezőt
-írja. Kódok: 1 clear, 2 white, 3 black, 4 pattern, 5 invert, 6 on,
-7 off, 8 stop. A főprogram végzi az SPI-műveletet, nem debuggerből
-hívunk HAL-függvényt és nem írunk közvetlenül GPIO-regisztert.
-Minden kérés megállítja az automata képírást. Egyszerre egy kérés engedélyezett.
-USB-ről és SWD-ről ne adjunk egymással versengő parancsokat.
+A PowerShell script az alkalmazott adatokat olvassa, az explicit megadott
+mezőket módosítja, ellenőrzi és beírja a teljes adatcsomagot. A visszaellenőrzött
+csomag után írja be a request=11 parancsot. Az MCU pillanatképet vesz,
+validál és újrarajzol. Sikeres képírás után tárolja az új állapotot,
+visszamásolja az adatokat a mailboxba, növeli a completed számlálót,
+végül törli a request mezőt.
 
-A script a build-st/sharp_lcd.elf szimbólumtáblájából olvassa a RAM-címet;
-az ELF-nek meg kell egyeznie a feltöltött firmware-rel. Futó CPU szükséges.
-A completed számláló és a last_command bizonyítja a végrehajtást, nem a
-RAM-ba írás sikerüzenete. CubeProgrammer esetenként ellenőrzési hibát
-jelezhet, ha a program már feldolgozta és törölte a request mezőt az
-eszköz visszaolvasása előtt. A script ilyenkor is a completion mezőket
-ellenőrzi; nem küldi újra a kérést.
+A host a completed és last_command alapján ellenőriz, majd az alkalmazott
+adatokat is visszaolvassa. Result=0 siker, 1…3 HAL-státusz, 4 érvénytelen
+adat. Hibás bemenetnél az alkalmazott adatok és a kép megmaradnak.
+SPI-hibánál a korábbi alkalmazott adatok megmaradnak és a DISP LOW-ra vált.
 
-A `status` itt a RAM-parancsfogadó állapotát adja vissza, nem az USB-s
-részletes állapotsort. HAL=0 továbbra is csak MCU-oldali siker: nincs
-LCD-visszaigazolás vagy kijelzőkép-visszaolvasás.
+Egy Windows névvel ellátott mutex sorosítja a scriptből kiadott SWD-kéréseket,
+beleértve az olvasás–módosítás–írás teljes folyamatát. A firmware a képet
+főprogramból rajzolja, a COM timer ettől függetlenül fut.
 
-## Ellenőrzés
+A címek a `build-st/sharp_lcd.elf` szimbólumtáblájából származnak. Az ELF
+egyezzen a feltöltött firmware-rel. A régi négymezős mailbox parancsai
+megtartották a helyüket, a demóadatok a struktúra végére kerültek.
 
-Hibamentes build, ST-LINK feltöltés és flash-visszaellenőrzés.
-Valós hardveren SWD-n végrehajtva: on, off, clear, white, black,
-pattern, invert, stop; completion számláló növekedett, minden HAL=0.
-A vizsgálat végén on + black állapot maradt. A látható kép helyességét
-ez nem igazolja; ehhez felhasználói megfigyelés szükséges.
+## Parancskódok
+
+1 clear, 2 white, 3 black, 4 pattern, 5 invert, 6 on, 7 off, 8 stop,
+9 checkerboard, 10 boat, 11 demóadatok alkalmazása.
+
+A CubeProgrammer egy gyorsan elfogyasztott request írásánál visszaolvasási
+hibát is jelezhet. A script ilyenkor a completion számlálót ellenőrzi.
+Egy kérést egyszer küld el.
+
+A demóadatok RAM-ban élnek. Újraindításkor a beépített mintaértékek
+állnak vissza. A képernyőn végig DEMO jelölés látszik.

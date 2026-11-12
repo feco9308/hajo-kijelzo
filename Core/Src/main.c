@@ -160,6 +160,7 @@ int main(void)
     diag_reset_flags = RCC->CSR;
     __HAL_RCC_CLEAR_RESET_FLAGS();
     diag_usb_status = usb_diag_init();
+    debug_control_init();
     test_stage = 1;
     check(sharp_init());         /* All Clear, then DISP HIGH. */
 
