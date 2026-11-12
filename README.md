@@ -1,3 +1,14 @@
+# Automatic white / black hardware test
+
+Active branch `test/automatic-black-white`: starts on power-up and repeats
+full white (hold 2 seconds), full black (hold 2 seconds). Frame transfer
+time is added between holds. USB `stop` holds the image, `auto` restarts.
+Wiring: PA5=SCLK, PA7=SI, PA4=active-HIGH SCS, PB0=EXTCOMIN,
+PB1=DISP; LCD pin8 EXTMODE=5V, VDD/VDDA=5V, common GND.
+Hardware SPI1 mode0, 2LINES, LSB-first, 250kHz; PB0 timer 1Hz/50%.
+The build and flash reset restore PA7 AF5 and clear any static pin test.
+The sections below describe the historical manual test base.
+
 ## Active diagnostic: 250 kHz, separate transaction for every row
 
 Same wiring and external COM startup as the previous Techtoys-style test:

@@ -162,8 +162,9 @@ int main(void)
     test_stage = 1;
     check(sharp_init());         /* All Clear, then DISP HIGH. */
 
-    test_stage = 11; /* Cleared; manual mode, no automatic image writes. */
+    test_stage = 11; /* Cleared; start repeated white/black test immediately. */
     test_line = 0;
+    usb_auto_running = 1;
     for (;;) {
         debug_control_poll();
         usb_diag_poll();

@@ -14,39 +14,19 @@ static uint32_t auto_due;
 void usb_auto_poll(void)
 {
     if (!usb_auto_running || (int32_t)(HAL_GetTick() - auto_due) < 0) return;
-    HAL_StatusTypeDef s = HAL_OK;
-    uint8_t row[SHARP_LINE_BYTES];
-    switch (auto_phase) {
-    case 0:
-        test_line = 0; test_stage = 20;
-        s = sharp_clear(); auto_phase = 1; auto_due = HAL_GetTick() + 1000U;
-        break;
-    case 1:
-        memset(row, 0, sizeof row); test_stage = 21;
-        ++test_line; s = sharp_write_line((uint16_t)test_line, row);
-        auto_due = HAL_GetTick() + 40U;
-        if (test_line == SHARP_HEIGHT) {
-            test_stage = 22; auto_phase = 2; auto_due = HAL_GetTick() + 2000U;
-        }
-        break;
-    case 2:
-        test_line = 0; test_stage = 23; auto_phase = 3; auto_due = HAL_GetTick();
-        break;
-    case 3:
-        memset(row, 0xFF, sizeof row); ++test_line;
-        s = sharp_write_line((uint16_t)test_line, row);
-        auto_due = HAL_GetTick() + 40U;
-        if (test_line == SHARP_HEIGHT) {
-            test_stage = 24; auto_phase = 0; auto_due = HAL_GetTick() + 2000U;
-        }
-        break;
-    default:
-        usb_auto_running = 0;
-        return;
-    }
-    last_hal_status = s; diag_last_hal_status = s;
+    /* Full white, hold for 2 seconds, full black, hold for 2 seconds.
+     * DISP stays enabled and the independent hardware COM timer runs.
+     * A manual image command or stop disables automatic writes. */
+    bool white = (auto_phase == 0U);
+    HAL_StatusTypeDef s = sharp_fill(white);
+    test_stage = white ? 12U : 13U;
+    auto_phase = white ? 1U : 0U;
+    auto_due = HAL_GetTick() + 2000U;
+    last_hal_status = s;
+    diag_last_hal_status = s;
     if (s != HAL_OK) {
-        usb_auto_running = 0; test_stage = 0xFFFFFFFFU;
+        usb_auto_running = 0;
+        test_stage = 0xFFFFFFFFU;
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_RESET);
         usb_diag_reply("ERR auto SPI/HAL; DISP forced LOW\r\n");
     }
@@ -81,7 +61,7 @@ void usb_manual_poll(void)
         HAL_GPIO_WritePin(GPIOB, LCD_DISP_PIN, GPIO_PIN_SET);
         HAL_Delay(1); board_wait_next_extcom_rise();
         auto_phase = 0; auto_due = HAL_GetTick(); usb_auto_running = 1;
-        usb_diag_reply("OK auto (line-by-line sweep; stop holds image)\r\n");
+        usb_diag_reply("OK auto (white 2s, black 2s; stop holds image)\r\n");
         return;
     }
 

@@ -46,12 +46,12 @@ try {
     [void](Send-Test 'status' '(?m)^STATUS .*stage=16 .*rx_dropped=0\r?\n')
     [void](Send-Test 'auto' '(?m)^OK auto .*\n')
     Start-Sleep -Milliseconds 1400
-    [void](Send-Test 'status' '(?m)^STATUS .*stage=21 .*line=[1-9]\d* auto=1 .*\n')
+    [void](Send-Test 'status' '(?m)^STATUS .*stage=1[23] .*auto=1 .*\n')
     [void](Send-Test 'stop' '(?m)^OK stop .*\n')
     $stoppedA = Send-Test 'status' '(?m)^STATUS .*auto=0 .*\n'
-    Start-Sleep -Milliseconds 200
+    Start-Sleep -Milliseconds 2500
     $stoppedB = Send-Test 'status' '(?m)^STATUS .*auto=0 .*\n'
-    if ([regex]::Match($stoppedA,'line=(\d+)').Groups[1].Value -ne [regex]::Match($stoppedB,'line=(\d+)').Groups[1].Value) { throw 'Line advanced after stop' }
+    if ([regex]::Match($stoppedA,'stage=(\d+)').Groups[1].Value -ne [regex]::Match($stoppedB,'stage=(\d+)').Groups[1].Value) { throw 'White/black phase changed after stop' }
     [void](Send-Test 'clear' '(?m)^OK clear HAL=0\r?\n')
     Start-Sleep -Seconds 3
     [void](Send-Test 'status' '(?m)^STATUS .*stage=11 .*disp=1 .*hal=0 .*spi_err=0 .*\n')
