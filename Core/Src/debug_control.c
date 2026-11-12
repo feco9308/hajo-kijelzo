@@ -3,6 +3,7 @@
 #include "sharp_ls044q7dh01.h"
 #include "usb_diag.h"
 #include "usb_manual.h"
+#include "boat_demo.h"
 
 volatile DebugControl lcd_debug;
 extern volatile uint32_t test_stage;
@@ -33,6 +34,7 @@ void debug_control_poll(void)
         break;
     case 8: break; /* Stop: leave pixels and DISP unchanged. */
     case 9: s = sharp_checkerboard(); test_stage = 17; break;
+    case 10: s = boat_demo_show(); test_stage = 18; break;
     default: s = HAL_ERROR; break;
     }
     last_hal_status = s;

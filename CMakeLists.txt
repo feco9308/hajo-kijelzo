@@ -8,7 +8,7 @@ set(HAL Drivers/STM32G4xx_HAL_Driver)
 set(DEVICE Drivers/CMSIS/Device/ST/STM32G4xx)
 set(USBD Drivers/STM32_USB_Device_Library)
 add_executable(sharp_lcd
-    Core/Src/main.c Core/Src/sharp_ls044q7dh01.c Core/Src/debug_control.c
+    Core/Src/main.c Core/Src/sharp_ls044q7dh01.c Core/Src/debug_control.c Core/Src/boat_demo.c
     ${DEVICE}/Source/Templates/system_stm32g4xx.c
     ${DEVICE}/Source/Templates/gcc/startup_stm32g431xx.s)
 target_sources(sharp_lcd PRIVATE USB/Src/usbd_conf.c USB/Src/usbd_desc.c

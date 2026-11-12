@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('status','clear','white','black','pattern','invert','checkerboard','on','off','stop')]
+    [ValidateSet('status','clear','white','black','pattern','invert','checkerboard','boat','on','off','stop')]
     [string]$Command = 'status'
 )
 $ErrorActionPreference = 'Stop'
@@ -29,7 +29,7 @@ function Read-Mailbox {
 $before = Read-Mailbox
 if ($Command -eq 'status') { $before; return }
 if ($before.request -ne 0) { throw 'An SWD command is already pending; CPU must be running.' }
-$commands = @{ clear=1; white=2; black=3; pattern=4; invert=5; on=6; off=7; stop=8; checkerboard=9 }
+$commands = @{ clear=1; white=2; black=3; pattern=4; invert=5; on=6; off=7; stop=8; checkerboard=9; boat=10 }
 $code = $commands[$Command]
 $write = (& $cli -c port=SWD freq=1000 mode=HOTPLUG -w32 $address $code 2>&1) -join "`n"
 # CubeProgrammer may report a verification error when firmware consumes and

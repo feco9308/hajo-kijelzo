@@ -1,4 +1,14 @@
-# Checkerboard and automatic white / black hardware test
+# Sailing dashboard demonstration
+
+Active branch `feat/sailing-dashboard-demo`. Startup displays a static
+320x240 sailing instrument screen marked DEMO. All values are examples:
+AWA +35 degrees, AWS 14.2kn, TWS 10.1kn, SOG 5.6kn, COG 247 degrees,
+XTE 0.02NM and waypoint WP01 at 2.4NM. No sensors supply these values yet.
+USB `boat` / `vitorlas`, or ST-LINK `-Command boat`, redraws the screen.
+Rendering uses a 9600-byte monochrome framebuffer and compact 5x7 glyphs.
+The display driver, SPI timing and verified pin mapping are retained.
+Build uses 27944 bytes Flash and 15104 bytes SRAM including stack reserve.
+Earlier sections below document the hardware test commands still available.
 
 On branch `test/checkerboard`, USB `checkerboard` (alias `sakk`) and
 ST-LINK `scripts/stlink-command.ps1 -Command checkerboard` display static
